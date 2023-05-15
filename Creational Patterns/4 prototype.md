@@ -167,3 +167,192 @@ public static void Main(string[] args)
 
 ## 迷宫
 
+MapSite 是一个抽象基类，Room、Wall 和 Door 是 MapSite 的具体实现。每个具体的 MapSite 类都实现了 Clone 方法。
+
+```c#
+public abstract class MapSite
+{
+    public abstract MapSite Clone();
+    // Other common methods
+}
+```
+
+
+```c#
+public class Room : MapSite
+{
+    public override MapSite Clone()
+    {
+        return new Room();
+    }
+    // Other room-specific methods
+}
+```
+
+
+```c#
+public class Wall : MapSite
+{
+    public override MapSite Clone()
+    {
+        return new Wall();
+    }
+    // Other wall-specific methods
+}
+```
+
+
+```c#
+public class Door : MapSite
+{
+    private Room _room1;
+    private Room _room2;
+
+    public Door(Room room1, Room room2)
+    {
+        _room1 = room1;
+        _room2 = room2;
+    }
+
+    public void Initialize(Room room1, Room room2)
+    {
+        _room1 = room1;
+        _room2 = room2;
+    }
+
+    public override MapSite Clone()
+    {
+        return new Door(_room1, _room2);
+    }
+    // Other door-specific methods
+}
+```
+
+
+```c#
+public class Maze
+{
+    // Maze methods
+}
+```
+MazePrototypeFactory 是一个工厂类，它维护了这些类的实例，当需要创建新的对象时，它会复制（Clone）这些实例，而不是直接创建新的实例。
+
+```c#
+public class MazePrototypeFactory
+{
+    private Maze _prototypeMaze;
+    private Room _prototypeRoom;
+    private Wall _prototypeWall;
+    private Door _prototypeDoor;
+
+    public MazePrototypeFactory(Maze m, Wall w, Room r, Door d)
+    {
+        _prototypeMaze = m;
+        _prototypeWall = w;
+        _prototypeRoom = r;
+        _prototypeDoor = d;
+    }
+
+    public Maze MakeMaze()
+    {
+        return _prototypeMaze; // It may need to implement a Clone method in Maze class.
+    }
+
+    public Room MakeRoom()
+    {
+        return (Room)_prototypeRoom.Clone();
+    }
+
+    public Wall MakeWall()
+    {
+        return (Wall)_prototypeWall.Clone();
+    }
+
+    public Door MakeDoor(Room r1, Room r2)
+    {
+        Door door = (Door)_prototypeDoor.Clone();
+        door.Initialize(r1, r2);
+        return door;
+    }
+}
+```
+MazeGame 类是使用 MazePrototypeFactory 的客户端，它通过工厂类来创建迷宫的部件（如房间、门和墙），并将这些部件组合成一个迷宫。在这个例子中，我们可以创建一个“默认”的迷宫，它使用标准的墙、房间和门。
+```c#
+public class MazeGame
+{
+    public Maze CreateMaze(MazePrototypeFactory factory)
+    {
+        Maze aMaze = factory.MakeMaze();
+        Room r1 = factory.MakeRoom();
+        Room r2 = factory.MakeRoom();
+        Door theDoor = factory.MakeDoor(r1, r2);
+
+        // add rooms into the maze and set door between r1 and r2
+
+        return aMaze;
+    }
+}
+```
+
+然后，如果我们想要创建一个特殊类型的迷宫，例如一个炸弹迷宫（其中的墙和房间都可能有炸弹），我们就可以创建新的 Wall 和 Room 子类，例如 BombedWall 和 RoomWithABomb，并在 MazePrototypeFactory 中使用这些新的类的实例作为原型。
+
+```c#
+public class BombedWall : Wall
+{
+    private bool _bomb;
+
+    public BombedWall()
+    {
+        _bomb = false;
+    }
+
+    public BombedWall(bool bomb)
+    {
+        _bomb = bomb;
+    }
+
+    public override Wall Clone()
+    {
+        return new BombedWall(_bomb);
+    }
+
+    public bool HasBomb()
+    {
+        return _bomb;
+    }
+}
+
+public class RoomWithABomb : Room
+{
+    // Bombed room specific methods
+}
+
+public class MazeGameWithBomb
+{
+    public Maze CreateMaze(MazePrototypeFactory factory)
+    {
+        Maze aMaze = factory.MakeMaze();
+        Room r1 = factory.MakeRoom();
+        Room r2 = factory.MakeRoom();
+        Door theDoor = factory.MakeDoor(r1, r2);
+
+        // add rooms into the maze and set door between r1 and r2
+
+        return aMaze;
+    }
+}
+```
+
+```c#
+public static void Main()
+{
+    MazeGameWithBomb game = new MazeGameWithBomb();
+    MazePrototypeFactory bombedMazeFactory = 
+        new MazePrototypeFactory(
+                new Maze(), 
+                new BombedWall(true), 
+                new RoomWithABomb(), 
+                new Door(null, null));
+    Maze maze = game.CreateMaze(bombedMazeFactory);
+}
+```
