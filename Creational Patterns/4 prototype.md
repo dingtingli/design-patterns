@@ -356,3 +356,167 @@ public static void Main()
     Maze maze = game.CreateMaze(bombedMazeFactory);
 }
 ```
+
+## 完整代码
+
+```c#
+public abstract class MapSite
+{
+    public abstract MapSite Clone();
+    // Other common methods
+}
+
+public class Room : MapSite
+{
+    public override MapSite Clone()
+    {
+        return new Room();
+    }
+    // Other room-specific methods
+}
+
+public class Wall : MapSite
+{
+    public override MapSite Clone()
+    {
+        return new Wall();
+    }
+    // Other wall-specific methods
+}
+
+public class Door : MapSite
+{
+    private Room _room1;
+    private Room _room2;
+
+    public Door(Room room1, Room room2)
+    {
+        _room1 = room1;
+        _room2 = room2;
+    }
+
+    public void Initialize(Room room1, Room room2)
+    {
+        _room1 = room1;
+        _room2 = room2;
+    }
+
+    public override MapSite Clone()
+    {
+        return new Door(_room1, _room2);
+    }
+    // Other door-specific methods
+}
+
+public class Maze
+{
+    // Maze methods
+}
+
+public class MazePrototypeFactory
+{
+    private Maze _prototypeMaze;
+    private Room _prototypeRoom;
+    private Wall _prototypeWall;
+    private Door _prototypeDoor;
+
+    public MazePrototypeFactory(Maze m, Wall w, Room r, Door d)
+    {
+        _prototypeMaze = m;
+        _prototypeWall = w;
+        _prototypeRoom = r;
+        _prototypeDoor = d;
+    }
+
+    public Maze MakeMaze()
+    {
+        return _prototypeMaze; // It may need to implement a Clone method in Maze class.
+    }
+
+    public Room MakeRoom()
+    {
+        return (Room)_prototypeRoom.Clone();
+    }
+
+    public Wall MakeWall()
+    {
+        return (Wall)_prototypeWall.Clone();
+    }
+
+    public Door MakeDoor(Room r1, Room r2)
+    {
+        Door door = (Door)_prototypeDoor.Clone();
+        door.Initialize(r1, r2);
+        return door;
+    }
+}
+
+public class MazeGame
+{
+    public Maze CreateMaze(MazePrototypeFactory factory)
+    {
+        Maze aMaze = factory.MakeMaze();
+        Room r1 = factory.MakeRoom();
+        Room r2 = factory.MakeRoom();
+        Door theDoor = factory.MakeDoor(r1, r2);
+
+        // add rooms into the maze and set door between r1 and r2
+
+        return aMaze;
+    }
+}
+
+public class BombedWall : Wall
+{
+    private bool _bomb;
+
+    public BombedWall()
+    {
+        _bomb = false;
+    }
+
+    public BombedWall(bool bomb)
+    {
+        _bomb = bomb;
+    }
+
+    public override Wall Clone()
+    {
+        return new BombedWall(_bomb);
+    }
+
+    public bool HasBomb()
+    {
+        return _bomb;
+    }
+}
+
+public class RoomWithABomb : Room
+{
+    // Bombed room specific methods
+}
+
+public class MazeGameWithBomb
+{
+    public Maze CreateMaze(MazePrototypeFactory factory)
+    {
+        Maze aMaze = factory.MakeMaze();
+        Room r1 = factory.MakeRoom();
+        Room r2 = factory.MakeRoom();
+        Door theDoor = factory.MakeDoor(r1, r2);
+
+        // add rooms into the maze and set door between r1 and r2
+
+        return aMaze;
+    }
+}
+
+public static void Main()
+{
+    MazeGameWithBomb game = new MazeGameWithBomb();
+    MazePrototypeFactory bombedMazeFactory = new MazePrototypeFactory(new Maze(), new BombedWall(true), new RoomWithABomb(), new Door(null, null));
+    Maze maze = game.CreateMaze(bombedMazeFactory);
+}
+
+
+```
