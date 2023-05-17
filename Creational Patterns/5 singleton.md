@@ -138,3 +138,238 @@ instance 的初始化是在 Instance 属性的 get 访问器中进行的。只�
 3. “双重检查锁定”（double-checked locking）
 
 
+饿汉式不支持延迟加载，懒汉式有性能问题，不支持高并发。那我们再来看一种既支持延迟加载、又支持高并发的单例实现方式，也就是双重检测实现方式。
+
+
+```csharp
+using System.Threading;
+
+public class IdGenerator
+{
+    private long id = 0;
+    private static IdGenerator instance = null;
+    private static readonly object lockObject = new object();
+
+    private IdGenerator() { }
+
+    public static IdGenerator Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                lock (lockObject)
+                {
+                    if (instance == null)
+                    {
+                        instance = new IdGenerator();
+                    }
+                }
+            }
+            return instance;
+        }
+    }
+
+    public long GetId()
+    {
+        return Interlocked.Increment(ref id);
+    }
+}
+
+// IdGenerator使用举例
+long id = IdGenerator.Instance.GetId();
+
+```
+
+我们首先通过if (instance == null)来检查实例是否已经创建。如果还没有创建，我们就通过synchronized（Java）或lock（C#）来加锁，然后再次检查实例是否已经创建。这样就能确保即使有多个线程同时尝试获取实例，也只会有一个线程能够创建实例。这种方法即实现了线程安全，又避免了在每次获取实例时都进行同步的开销。
+
+```c#
+public class Singleton
+{
+    private static volatile Singleton instance; // volatile 关键字确保 instance 在所有线程中同步
+    private static object lockObj = new object(); // lock 对象
+
+    private Singleton() {}
+
+    public static Singleton Instance
+    {
+        get
+        {
+            if (instance == null) // 第一次检查
+            {
+                lock (lockObj) // 锁定
+                {
+                    if (instance == null) // 第二次检查
+                    {
+                        instance = new Singleton();
+                    }
+                }
+            }
+            return instance;
+        }
+    }
+}
+
+```
+
+上述实现方式存在问题：CPU 指令重排序可能导致在 IdGenerator 类的对象被关键字 new 创建并赋值给 instance 之后，还没来得及初始化（执行构造函数中的代码逻辑），就被另一个线程使用了。
+
+(对于.NET/C#环境，你所描述的情况是不会发生的，因为.NET的内存模型保证了在锁的释放和获取之间的操作的正确顺序。这意味着在锁的释放操作发生后，所有在该锁内进行的写操作都将在任何后续获取该锁的线程中可见。这就保证了在构造函数完成之后实例才会被其它线程看到。)
+
+这样，另一个线程就使用了一个没有完整初始化的 IdGenerator 类的对象。要解决这个问题，我们只需要给 instance 成员变量添加 volatile 关键字来禁止指令重排序即可。
+
+
+
+```csharp
+public class IdGenerator
+{
+    private long id = 0;
+    private static volatile IdGenerator instance = null;
+    private static readonly object lockObj = new object();
+
+    private IdGenerator() { }
+
+    public static IdGenerator Instance
+    {
+        get 
+        {
+            if (instance == null)
+            {
+                lock (lockObj)
+                {
+                    if (instance == null)
+                    {
+                        instance = new IdGenerator();
+                    }
+                }
+            }
+            return instance;
+        }
+    }
+
+    public long GetId()
+    {
+        return Interlocked.Increment(ref id);
+    }
+}
+
+```
+
+
+volatile关键字确保了所有的读操作都将在所有的写操作之后发生，这样就避免了你所描述的问题。然而，使用volatile关键字会引入额外的性能开销，因此你应该只在确实需要的时候才使用它。在这个特定的情况下，使用volatile关键字实际上是不必要的，因为.NET的内存模型已经提供了足够的保护。
+
+4. 静态内部类(Static Inner Class)
+
+在Java中，静态内部类是一种嵌套在外部类中的静态类，它可以访问外部类的静态成员，但不能直接访问外部类的实例成员。
+
+```java
+import java.util.concurrent.atomic.AtomicLong;
+
+public class IdGenerator {
+  private AtomicLong id = new AtomicLong(0);
+
+  private IdGenerator() {}
+
+  private static class SingletonHolder {
+    private static final IdGenerator INSTANCE = new IdGenerator();
+  }
+
+  public static IdGenerator getInstance() {
+    return SingletonHolder.INSTANCE;
+  }
+
+  public long getId() {
+    return id.incrementAndGet();
+  }
+}
+
+```
+SingletonHolder 是一个静态内部类，当外部类 IdGenerator 被加载的时候，并不会创建 SingletonHolder 实例对象。只有当调用 getInstance() 方法时，SingletonHolder 才会被加载，这个时候才会创建 instance。instance 的唯一性、创建过程的线程安全性，都由 JVM 来保证。所以，这种实现方法既保证了线程安全，又能做到延迟加载。
+
+
+在.NET/C#中，可以通过嵌套类（Nested Class）来实现类似的功能，但嵌套类并不区分静态或非静态，它可以访问外部类的所有成员。不过，它通常不会用来实现单例模式，因为单例模式在C#中已经有非常成熟的实现方式。
+
+如果我们仍然想使用嵌套类来实现单例模式，可以像下面这样做：
+
+```c#
+using System.Threading;
+
+public class IdGenerator
+{
+    private long id = 0;
+
+    private IdGenerator() { }
+
+    private class SingletonHolder
+    {
+        static SingletonHolder()
+        {
+        }
+
+        internal static readonly IdGenerator instance = new IdGenerator();
+    }
+
+    public static IdGenerator Instance
+    {
+        get { return SingletonHolder.instance; }
+    }
+
+    public long GetId()
+    {
+        return Interlocked.Increment(ref id);
+    }
+}
+
+```
+
+我们创建了一个名为SingletonHolder的嵌套类，它包含了IdGenerator的单例。在SingletonHolder类第一次被访问时，它的静态成员instance会被初始化，从而实现了单例的延迟加载。
+
+5. Lazy<T>
+
+.NET 4.0 引入了 Lazy<T> 类型来支持延迟初始化，这种方式可以用来实现简单的线程安全的单例模式。
+
+```csharp
+public class Singleton
+{
+    private static readonly Lazy<Singleton> lazy = new Lazy<Singleton>(() => new Singleton());
+    
+    private Singleton() {}
+    
+    public static Singleton Instance
+    {
+        get { return lazy.Value; }
+    }
+}
+```
+
+我们可以使用Lazy<T>来实现懒汉式单例。Lazy<T>类提供了一种延迟初始化对象的方式。在第一次访问Lazy<T>.Value属性时，它将创建并初始化一个新的实例。这个过程是线程安全的。以下是代码示例：
+
+```c#
+public class IdGenerator
+{
+    private long id = 0;
+    private static readonly Lazy<IdGenerator> instance = new Lazy<IdGenerator>(() => new IdGenerator());
+
+    private IdGenerator() { }
+
+    public static IdGenerator Instance
+    {
+        get { return instance.Value; }
+    }
+
+    public long GetId()
+    {
+        return System.Threading.Interlocked.Increment(ref id);
+    }
+}
+```
+
+这段代码的工作原理是这样的：
+
+我们声明了一个类型为 Lazy<IdGenerator> 的 instance 字段，并在声明时就初始化它。Lazy<T>的构造函数接受一个委托，这个委托定义了如何创建和初始化实例。
+
+在Instance属性的get访问器中，我们返回instance.Value。在第一次访问Value属性时，Lazy<T>将调用我们提供的委托来创建和初始化一个新的IdGenerator实例。
+
+GetId方法的实现与之前一样，我们使用System.Threading.Interlocked.Increment方法来线程安全地增加id的值。
+
+通过使用Lazy<T>，我们可以实现真正的懒加载：只有在实际需要IdGenerator实例时，它才会被创建和初始化。
