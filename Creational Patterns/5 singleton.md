@@ -89,6 +89,8 @@ public class AnotherClass
 
 2. 懒汉式 Lazy Initialization
 
+懒汉式相对于饿汉式的优势是支持延迟加载。
+
 ```csharp
 using System.Threading;
 
@@ -124,4 +126,14 @@ public class IdGenerator
 // IdGenerator使用举例
 long id = IdGenerator.Instance.GetId();
 ```
+
+instance 的初始化是在 Instance 属性的 get 访问器中进行的。只有当你显式调用 IdGenerator.Instance 时，instance 才会被初始化。如果你使用了 IdGenerator 类的其他成员，但没有调用 IdGenerator.Instance，那么 instance 就不会被初始化。
+
+
+懒汉式这种方式的优点是如果单例对象没有被使用，就不会初始化，节省了资源。但缺点是需要考虑多线程环境下的线程安全问题。如果多个线程同时访问并试图创建单例对象，就需要适当的同步机制来保证只创建一个单例对象。
+
+
+我们给 get 访问器方法加了一把大锁（lock），导致这个函数的并发度很低。量化一下的话，并发度是 1，也就相当于串行操作了。而这个函数是在单例使用期间，一直会被调用。如果这个单例类偶尔会被用到，那这种实现方式还可以接受。但是，如果频繁地用到，那频繁加锁、释放锁及并发度低等问题，会导致性能瓶颈，这种实现方式就不可取了。
+
+3. “双重检查锁定”（double-checked locking）
 
