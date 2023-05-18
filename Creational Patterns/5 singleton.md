@@ -373,3 +373,79 @@ public class IdGenerator
 GetId方法的实现与之前一样，我们使用System.Threading.Interlocked.Increment方法来线程安全地增加id的值。
 
 通过使用Lazy<T>，我们可以实现真正的懒加载：只有在实际需要IdGenerator实例时，它才会被创建和初始化。
+
+
+## 迷宫
+
+以下是翻译后的内容和详细解释。同时，我将代码部分改为C#。
+
+示例代码：
+假设我们定义一个MazeFactory类，用于构建迷宫。MazeFactory定义了一个用于构建迷宫不同部分的接口。子类可以重新定义操作，返回特殊产品类的实例，例如BombedWall对象而不是普通的Wall对象。
+
+这里需要注意的是，Maze应用程序只需要一个迷宫工厂实例，该实例应该对构建迷宫的任何部分的代码都可用。这就是Singleton模式的作用。通过将MazeFactory设置为单例，我们可以在不使用全局变量的情况下使迷宫对象在全局范围内可访问。
+
+为简单起见，我们假设永远不会对MazeFactory进行子类化（稍后我们会讨论另一种选择）。我们通过添加一个静态Instance操作和一个静态实例成员来保存唯一实例，将其设置为C#中的Singleton类。我们还必须保护构造函数，以防止意外实例化，这可能导致多个实例。
+
+```csharp
+public class MazeFactory
+{
+    protected MazeFactory() { }
+
+    private static MazeFactory _instance;
+
+    public static MazeFactory Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                _instance = new MazeFactory();
+            }
+            return _instance;
+        }
+    }
+}
+```
+
+现在我们来考虑当 MazeFactory 有子类时会发生什么，以及应用程序如何决定使用哪一个。我们将通过环境变量选择迷宫类型，并添加代码，在环境变量的值的基础上实例化适当的 MazeFactory 子类。Instance 操作是放置此代码的好地方，因为它已经实例化了 MazeFactory：
+
+```csharp
+
+public class MazeFactory
+{
+    protected MazeFactory() { }
+
+    private static MazeFactory _instance;
+
+    public static MazeFactory Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                string mazeStyle = Environment.GetEnvironmentVariable("MAZESTYLE");
+                if (mazeStyle == "bombed")
+                {
+                    _instance = new BombedMazeFactory();
+                }
+                else if (mazeStyle == "enchanted")
+                {
+                    _instance = new EnchantedMazeFactory();
+                }
+                // ... 其他可能的子类
+                else
+                { // 默认
+                    _instance = new MazeFactory();
+                }
+            }
+            return _instance;
+        }
+    }
+}
+```
+
+请注意，每当你定义一个新的MazeFactory子类时，必须修改Instance。这在这个应用程序中可能不是问题，但对于在框架中定义的抽象工厂可能会有问题。
+
+现在，这里的代码都是用C#写的，你应该能看明白它们如何实现了迷宫工厂的单例模式，并且如何通过环境变量来改变它的行为。
+
+最后，我要说明的是，虽然在这个例子中我们是通过环境变量来选择工厂的类型，但这只是一种方式。在实际应用中，可能会有其他方式来决定使用哪个工厂，比如通过配置文件、数据库、用户输入等等。
