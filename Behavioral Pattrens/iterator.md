@@ -83,3 +83,253 @@ Kofler提供了关于如何在ET++中实现强健迭代器的良好讨论[Kof93]
 8. **空迭代器。** 空迭代器（NullIterator）是一种退化的迭代器，对于处理边界条件很有帮助。按定义，空迭代器总是完成遍历；也就是说，它的IsDone操作总是返回真。
 
     空迭代器可以使遍历树形结构的聚合（如Composite）更加容易。在遍历的每个点，我们都会询问当前元素的子元素的迭代器。聚合元素如常返回具体的迭代器。但是，叶子元素返回一个空迭代器的实例。这让我们可以以统一的方式实现整个结构的遍历。
+
+## sample code
+
+我们会展示两个迭代器的实现，一个用于从前向后遍历 List，另一个用于从后向前遍历（基础库只支持前者）。然后我们展示如何使用这些迭代器，以及如何避免依赖特定的实现。接着，我们修改设计以确保迭代器被正确删除。最后一个例子展示了一个内部迭代器，并将其与外部迭代器进行比较。
+
+1. List和迭代器接口。首先让我们看一下与实现迭代器相关的List接口部分。
+
+    ```csharp
+    public class List<T>
+    {
+        private const int DEFAULT_LIST_CAPACITY = 10;
+        private T[] items;
+
+        public List(int size = DEFAULT_LIST_CAPACITY)
+        {
+            items = new T[size];
+        }
+
+        public long Count
+        {
+            get { return items.Length; }
+        }
+
+        public T Get(long index)
+        {
+            return items[index];
+        }
+    }
+    ```
+
+    我们不需要赋予迭代器对底层数据结构的特权访问，也就是说，迭代器类并不是 List 的朋友类。为了使不同的遍历透明使用，我们定义了一个抽象的 Iterator 类，它定义了迭代器接口。
+
+    ```csharp
+    public abstract class Iterator<T>
+    {
+        public abstract void First();
+        public abstract void Next();
+        public abstract bool IsDone();
+        public abstract T CurrentItem();
+        protected Iterator() { /* ... */ }
+    }
+    ```
+
+2. 迭代器子类的实现。ListIterator 是 Iterator 的子类。
+
+```csharp
+public class ListIterator<T> : Iterator<T>
+{
+    private List<T> _list;
+    private long _current;
+
+    public ListIterator(List<T> aList)
+    {
+        _list = aList;
+        _current = 0;
+    }
+
+    public override void First()
+    {
+        _current = 0;
+    }
+
+    public override void Next()
+    {
+        _current++;
+    }
+
+    public override bool IsDone()
+    {
+        return _current >= _list.Count();
+    }
+
+    public override T CurrentItem()
+    {
+        if (IsDone())
+        {
+            throw new InvalidOperationException("Iterator out of bounds");
+        }
+
+        return _list.Get(_current);
+    }
+}
+```
+
+ListIterator 的实现非常直接。它将 List 以及一个索引 _current 存储到列表中；
+
+ReverseListIterator 的实现基本相同，除了它的 First 操作会将 _current 定位到列表的末尾，并且 Next 会使 _current 朝向第一个项递减。
+
+```csharp
+public class ReverseListIterator<T> : Iterator<T>
+{
+    private List<T> _list;
+    private long _current;
+
+    public ListIterator(List<T> aList)
+    {
+        _list = aList;
+        _current = 0;
+    }
+
+    public override void First()
+    {
+        _current = _list.Count()-1;
+    }
+
+    public override void Next()
+    {
+        _current--;
+    }
+
+    public override bool IsDone()
+    {
+        return _current < 0;
+    }
+
+    public override T CurrentItem()
+    {
+        if (IsDone())
+        {
+            throw new InvalidOperationException("Iterator out of bounds");
+        }
+
+        return _list.Get(_current);
+    }
+}
+```
+
+3. 使用迭代器。假设我们有一个 Employee 对象的 List，我们希望打印所有包含的员工。Employee 类支持这个功能，通过一个 Print 操作。要打印列表，我们定义一个 PrintEmployees 操作，它接受一个 Employee ListIterator 作为参数：
+
+```csharp
+public void PrintEmployees<T>(Iterator<T> iterator) where T : Employee
+{
+    for (iterator.First(); !iterator.IsDone; iterator.Next())
+    {
+        iterator.CurrentItem.Print();
+    }
+}
+
+var employees = new List<Employee>(20);
+// Populate the employees list...
+var forward = new ListIterator<Employee>(employees);
+var backward = new ReverseListIterator<Employee>(employees);
+PrintEmployees(forward);
+PrintEmployees(backward);
+```
+
+4. 避免对特定列表实现的承诺。让我们考虑一下如何将跳跃列表（SkipList）版本的List应用到我们的迭代代码中。一个SkipList子类需要提供一个实现迭代器接口的SkipListIterator。在内部，SkipListIterator需要保留超过一个索引来有效地进行迭代。但由于SkipListIterator符合迭代器接口，当员工数据存储在SkipList对象中时，也可以使用PrintEmployees操作。
+
+```c#
+SkipList<Employee> employees = new SkipList<Employee>();
+// ...
+
+SkipListIterator<Employee> iterator = new SkipListIterator<Employee>(employees);
+PrintEmployees(iterator);
+```
+
+虽然这种方法可行，但如果我们不必承诺使用特定的List实现，例如SkipList，那就更好了。我们可以引入一个AbstractList类来标准化不同列表实现的接口。List和SkipList成为AbstractList的子类。为了实现多态迭代，AbstractList定义了一个工厂方法CreateIterator，子类重写这个方法以返回对应的迭代器：
+
+```csharp
+public abstract class AbstractList<T>
+{
+    // ...
+
+    public abstract Iterator<T> CreateIterator();
+
+    // ...
+}
+
+```
+
+List重写CreateIterator以返回一个ListIterator对象：
+
+```c#
+public class List<T> : AbstractList<T>
+{
+    // ...
+
+    public override Iterator<T> CreateIterator()
+    {
+        return new ListIterator<T>(this);
+    }
+
+    // ...
+}
+
+```
+
+现在我们可以写出打印员工信息的代码，而无需考虑具体的表示方法：
+
+```c#
+AbstractList<Employee> employees;
+// ...
+
+Iterator<Employee> iterator = employees.CreateIterator();
+PrintEmployees(iterator);
+
+```
+
+6. 内部ListIterator。作为最后一个例子，让我们看一下内部或被动ListIterator类的可能实现。在这里，迭代器控制迭代，并对每个元素应用一个操作。
+
+下面是一个使用C#的lambda表达式（匿名函数）和内部迭代器的例子：
+
+
+在这个例子中，我们有一个ListTraverser类，它接收一个List<T>和一个Func<T, bool>作为参数。这个Func<T, bool>就是我们要对每个元素执行的操作，它接收一个元素作为参数，返回一个bool值来确定是否继续遍历。
+
+```c#
+public class ListTraverser<T>
+{
+    private readonly List<T> _list;
+    private readonly Func<T, bool> _action;
+    private readonly ListIterator<T> _iterator;
+
+    public ListTraverser(List<T> list, Func<T, bool> action)
+    {
+        _list = list;
+        _action = action;
+        _iterator = new ListIterator<T>(_list);
+    }
+
+    public bool Traverse()
+    {
+        for (_iterator.First(); !_iterator.IsDone(); _iterator.Next())
+        {
+            if (!_action(_iterator.CurrentItem()))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+```
+
+我们可以用这个类来打印出 Employee 列表中的前10个元素：
+```c#
+List<Employee> employees = /* 假设这个列表已被填充 */;
+int count = 0;
+
+ListTraverser<Employee> traverser = new ListTraverser<Employee>(
+    employees, 
+    employee => 
+    {
+        Console.WriteLine(employee);
+        count++;
+        return count < 10;
+    });
+
+traverser.Traverse();
+```
