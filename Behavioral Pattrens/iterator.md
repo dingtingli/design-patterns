@@ -333,3 +333,272 @@ ListTraverser<Employee> traverser = new ListTraverser<Employee>(
 
 traverser.Traverse();
 ```
+
+## 极客时间笔记
+
+在平时开发中，特别是业务开发，我们直接使用即可，很少会自己去实现一个迭代器。不过，知其然知其所以然，弄懂原理能帮助我们更好的使用这些工具类，所以，我觉得还是有必要学习一下这个模式。
+
+迭代器模式将集合对象的遍历操作从集合类中拆分出来，放到迭代器类中，让两者的职责更加单一。
+
+这里为了讲解迭代器的实现原理，我们假设某个新的编程语言的基础类库中，还没有提供线性容器对应的迭代器，需要我们从零开始开发。现在，我们一块来看具体该如何去做。
+
+假设在这种新的编程语言中，数组和链表 这两个数据结构分别对应 ArrayList 和 LinkedList 两个类。除此之外，我们从两个类中抽象出公共的接口，定义为 List 接口，以方便开发者基于接口而非实现编程，编写的代码能在两种数据存储结构之间灵活切换。
+
+我们针对 ArrayList 和 LinkedList 两个线性容器，设计实现对应的迭代器。我们定义一个迭代器接口 Iterator，以及针对两种容器的具体的迭代器实现类 ArrayIterator 和 ListIterator。
+
+```c#
+public interface IIterator<T>
+{
+    void First();
+    void Next();
+    bool IsDone();
+    T CurrentItem();
+}
+```
+
+```c#
+// ArrayList 迭代器
+public class ArrayIterator<T> : IIterator<T>
+{
+    private readonly ArrayList<T> _arrayList;
+    private int _current;
+
+    public ArrayIterator(ArrayList<T> arrayList)
+    {
+        _arrayList = arrayList;
+        _current = 0;
+    }
+
+    public void First()
+    {
+        _current = 0;
+    }
+
+    public void Next()
+    {
+        _current++;
+    }
+
+    public bool IsDone()
+    {
+        return _current >= _arrayList.Count;
+    }
+
+    public T CurrentItem()
+    {
+        if (IsDone())
+        {
+            throw new InvalidOperationException("Iterator out of bounds");
+        }
+
+        return _arrayList.Get(_current);
+    }
+}
+
+```
+
+```c#
+
+// LinkedList 迭代器
+public class LinkedListIterator<T> : IIterator<T>
+{
+    private readonly LinkedList<T> _linkedList;
+    private int _current;
+
+    public LinkedListIterator(LinkedList<T> linkedList)
+    {
+        _linkedList = linkedList;
+        _current = 0;
+    }
+
+    public void First()
+    {
+        _current = 0;
+    }
+
+    public void Next()
+    {
+        _current++;
+    }
+
+    public bool IsDone()
+    {
+        return _current >= _linkedList.Count;
+    }
+
+    public T CurrentItem()
+    {
+        if (IsDone())
+        {
+            throw new InvalidOperationException("Iterator out of bounds");
+        }
+
+        return _linkedList.Get(_current);
+    }
+}
+```
+
+```c#
+// 定义 List 接口
+public interface IList<T>
+{
+    void Add(T item);
+    T Get(int index);
+    void Remove(T item);
+    bool Contains(T item);
+    int Count { get; }
+    IIterator<T> GetIterator();
+}
+```
+
+```c#
+// ArrayList 实现 IList 接口
+public class ArrayList<T> : IList<T>
+{
+    private List<T> _internalList = new List<T>();
+
+    public void Add(T item)
+    {
+        _internalList.Add(item);
+    }
+
+    public T Get(int index)
+    {
+        return _internalList[index];
+    }
+
+    public void Remove(T item)
+    {
+        _internalList.Remove(item);
+    }
+
+    public bool Contains(T item)
+    {
+        return _internalList.Contains(item);
+    }
+
+    public int Count => _internalList.Count;
+
+    public IIterator<T> GetIterator()
+    {
+        return new ArrayIterator<T>(this);
+    }
+}
+```
+
+```c#
+public class LinkedList<T> : IList<T>
+{
+    private System.Collections.Generic.LinkedList<T> _internalList = new System.Collections.Generic.LinkedList<T>();
+
+    public void Add(T item)
+    {
+        _internalList.AddLast(item);
+    }
+
+    public T Get(int index)
+    {
+        return _internalList.Skip(index).First();
+    }
+
+    public void Remove(T item)
+    {
+        _internalList.Remove(item);
+    }
+
+    public bool Contains(T item)
+    {
+        return _internalList.Contains(item);
+    }
+
+    public int Count => _internalList.Count;
+
+    public IIterator<T> GetIterator()
+    {
+        return new LinkedListIterator<T>(this);
+    }
+}
+```
+
+```c#
+static void Main(string[] args)
+{
+    // 创建 ArrayList 并添加元素
+    IList<string> arrayList = new ArrayList<string>();
+    arrayList.Add("Hello");
+    arrayList.Add("World");
+    arrayList.Add("from");
+    arrayList.Add("ArrayList");
+
+    // 获取 ArrayList 的迭代器并遍历
+    IIterator<string> arrayListIterator = arrayList.GetIterator();
+    while (!arrayListIterator.IsDone())
+    {
+        Console.WriteLine(arrayListIterator.CurrentItem());
+        arrayListIterator.Next();
+    }
+
+    // 创建 LinkedList 并添加元素
+    IList<string> linkedList = new LinkedList<string>();
+    linkedList.Add("Hello");
+    linkedList.Add("World");
+    linkedList.Add("from");
+    linkedList.Add("LinkedList");
+
+    // 获取 LinkedList 的迭代器并遍历
+    IIterator<string> linkedListIterator = linkedList.GetIterator();
+    while (!linkedListIterator.IsDone())
+    {
+        Console.WriteLine(linkedListIterator.CurrentItem());
+        linkedListIterator.Next();
+    }
+
+    Console.ReadKey();
+}
+```
+
+使用迭代器遍历集合的优势是什么？
+
+我们可以使用foreach循环遍历C#中的集合，但是要使用这种方法，我们需要实现IEnumerable和IEnumerator接口。在当前实现中，我们定义的IList接口并没有继承这两个接口。在.NET中，一般情况下我们将使用实现了IEnumerable和IEnumerator接口的集合类，这样我们可以直接使用foreach语句来遍历集合。
+
+以下是你可以将IList和IIterator更改为与.NET集合接口一致的方式：
+
+csharp
+```c#
+public interface IList<T> : IEnumerable<T>
+{
+    void Add(T item);
+    IIterator<T> GetIterator();
+}
+
+public interface IIterator<T> : IEnumerator<T>
+{
+    bool HasNext();
+}
+```
+
+然后在ArrayList和LinkedList类中实现这些接口的所有方法。一旦你完成了这些，你就可以使用foreach循环来遍历这些集合：
+
+```c#
+foreach (var item in arrayList)
+{
+    Console.WriteLine(item);
+}
+
+foreach (var item in linkedList)
+{
+    Console.WriteLine(item);
+}
+```
+
+这就是为什么C#中的foreach循环非常方便的原因，它将迭代器模式融入了语言本身。
+
+foreach 循环只是一个语法糖而已，底层是基于迭代器来实现的。
+
+for 循环遍历方式比起迭代器遍历方式，代码看起来更加简洁。那我们为什么还要用迭代器来遍历容器呢？
+
+1. 对于类似数组和链表这样的数据结构，遍历方式比较简单，直接使用 for 循环来遍历就足够了。但是，对于复杂的数据结构（比如树、图）来说，有各种复杂的遍历方式。比如，树有前中后序、按层遍历，图有深度优先、广度优先遍历等等。如果由客户端代码来实现这些遍历算法，势必增加开发成本，而且容易写错。如果将这部分遍历的逻辑写到容器类中，也会导致容器类代码的复杂性。
+
+2. 将游标指向的当前位置等信息，存储在迭代器类中，每个迭代器独享游标信息。这样，我们就可以创建多个不同的迭代器，同时对同一个容器进行遍历而互不影响。
+
+3. 容器和迭代器都提供了抽象的接口，方便我们在开发的时候，基于接口而非具体的实现编程。当需要切换新的遍历算法的时候，比如，从前往后遍历链表切换成从后往前遍历链表，客户端代码只需要将迭代器类从 LinkedIterator 切换为 ReversedLinkedIterator 即可，其他代码都不需要修改。
