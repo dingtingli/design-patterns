@@ -617,3 +617,90 @@ for 循环遍历方式比起迭代器遍历方式，代码看起来更加简洁�
 
 
 ## 极客时间 迭代器模型下
+
+如何实现一个支持“快照”功能的迭代器？
+
+```c#
+public class SnapshotList<T> : IEnumerable<T>
+{
+    private List<T> _list = new List<T>();
+
+    public void Add(T item)
+    {
+        _list.Add(item);
+    }
+
+    public bool Remove(T item)
+    {
+        return _list.Remove(item);
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        return new SnapshotEnumerator<T>(_list);
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
+}
+
+public class SnapshotEnumerator<T> : IEnumerator<T>
+{
+    private List<T> _snapshot;
+    private int _index = -1;
+
+    public SnapshotEnumerator(List<T> original)
+    {
+        _snapshot = new List<T>(original);
+    }
+
+    public T Current
+    {
+        get
+        {
+            if (_index < 0 || _index >= _snapshot.Count)
+                throw new InvalidOperationException();
+            return _snapshot[_index];
+        }
+    }
+
+    object IEnumerator.Current => Current;
+
+    public void Dispose() { }
+
+    public bool MoveNext()
+    {
+        _index++;
+        return _index < _snapshot.Count;
+    }
+
+    public void Reset()
+    {
+        _index = -1;
+    }
+}
+
+```
+
+```c#
+var list = new SnapshotList<int>() { 1, 2, 3 };
+
+var iterator1 = list.GetEnumerator();
+
+list.Remove(2);
+
+var iterator2 = list.GetEnumerator();
+
+while (iterator1.MoveNext())
+{
+    Console.WriteLine(iterator1.Current);
+}
+
+while (iterator2.MoveNext())
+{
+    Console.WriteLine(iterator2.Current);
+}
+
+```
