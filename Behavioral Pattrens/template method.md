@@ -209,3 +209,220 @@ public class ActionInvoker
 3. 接着，MvcApplication使用ActionInvoker决定应该执行哪个Action，然后调用Controller的OnActionExecuting方法、执行Action、调用Controller的OnActionExecuted方法。
 
 虽然这个例子极度简化了ASP.NET MVC框架的实现，并没有涉及到很多重要的细节，如模型绑定、ActionResult、过滤器等，但它大致描绘了ASP.NET MVC处理HTTP请求的流程，以及模板方法模式在这个流程中的应用。
+
+## 回调函数
+
+通过代码示例来解释模板方法模式和回调函数的相似之处和区别。
+
+模板方法模式：
+我们先来看一个C#中使用模板方法模式的例子：
+
+```c#
+public abstract class AbstractClass
+{
+    // This is the 'template method'
+    public void TemplateMethod()
+    {
+        Step1();
+        Step2();
+    }
+
+    public abstract void Step1();
+    public abstract void Step2();
+}
+
+public class ConcreteClass : AbstractClass
+{
+    public override void Step1()
+    {
+        Console.WriteLine("ConcreteClass Step1");
+    }
+
+    public override void Step2()
+    {
+        Console.WriteLine("ConcreteClass Step2");
+    }
+}
+```
+
+// Usage:
+AbstractClass demo = new ConcreteClass();
+demo.TemplateMethod();
+在这个例子中，TemplateMethod 是模板方法，它定义了一个算法的骨架。这个算法的一些步骤（Step1 和 Step2）被延迟到子类 ConcreteClass 中实现。
+
+回调函数：
+接下来，我们看一个C#中使用回调函数的例子：
+
+```c#
+public delegate void Callback();
+
+public class Caller
+{
+    public void Call(Callback callback)
+    {
+        Console.WriteLine("Before callback");
+        callback();
+        Console.WriteLine("After callback");
+    }
+}
+
+// Usage:
+Caller caller = new Caller();
+Callback callback = () => Console.WriteLine("Inside callback");
+caller.Call(callback);
+```
+
+
+在这个例子中，Caller 类的 Call 方法接收一个 Callback 委托作为参数。Call 方法在调用回调函数前后执行一些操作。通过传入不同的回调函数，我们可以改变 Call 方法中的行为，而不需要修改 Caller 类的代码。
+
+如你所见，这两种策略都允许我们在不改变不可变部分代码的情况下修改可变部分的代码。不过模板方法模式是通过继承和方法重写实现的，而回调函数是通过传递函数实现的。
+
+## 设计模式笔记
+
+**模板方法** 类行为模式
+
+**意图**
+
+在一个操作中定义算法的框架，将一些步骤推迟到子类中。模板方法让子类可以重新定义算法的某些步骤，而不改变算法的结构。
+
+**动机**
+
+考虑一个应用程序框架，它提供了Application和Document类。Application类负责打开存储在外部格式中的现有文档，如文件。Document对象代表从文件中读取的文档的信息。
+
+使用这个框架构建的应用程序可以对Application和Document进行子类化，以满足特定需求。例如，一个绘图应用程序定义了DrawApplication和DrawDocument子类；一个电子表格应用程序定义了SpreadsheetApplication和SpreadsheetDocument子类。
+
+抽象的Application类在其OpenDocument操作中定义了打开和读取文档的算法：
+
+```csharp
+void OpenDocument(string name) {
+    if (!CanOpenDocument(name)) {
+        // 无法处理此文档
+        return;
+    }
+
+    Document doc = DoCreateDocument();
+    if (doc != null) {
+        _docs.Add(doc);
+        AboutToOpenDocument(doc);
+        doc.Open();
+        doc.DoRead();
+    }
+}
+```
+
+OpenDocument定义了打开文档的每个步骤。它检查文档是否可以被打开，创建应用程序特定的Document对象，将它添加到它的文档集合中，并从文件中读取Document。
+
+我们称OpenDocument为模板方法。一个模板方法以子类覆盖提供具体行为的抽象操作的形式定义一个算法。Application子类定义了检查文档是否可以被打开（CanOpenDocument）和创建Document（DoCreateDocument）的算法步骤。Document类定义了读取文档（DoRead）的步骤。模板方法还定义了一个让Application子类知道文档即将被打开（AboutToOpenDocument）的操作，以防他们关心。
+
+通过使用抽象操作定义算法的一些步骤，模板方法固定了它们的排序，但允许Application和Document子类根据需要变化这些步骤。
+
+**适用性**
+
+当需要实现算法的不变部分一次，并将可变的行为留给子类实现时，应使用模板方法模式。
+
+当子类之间的公共行为应被提取并在一个公共类中本地化以避免代码重复时。这是Opdyke和Johnson [OJ93]描述的"重构以泛化"的一个好例子。首先，你识别现有代码中的差异，然后将这些差异分解成新的操作。最后，用调用这些新操作的模板方法替换不同的代码。
+
+当需要控制子类的扩展时。你可以定义一个模板方法，该方法在特定点调用"hook"操作（见后果），从
+
+而只允许在这些点进行扩展。
+
+**结构**
+
+参与者：
+- **抽象类（Application）**：定义抽象原语操作，这些操作由具体子类定义以实现算法的步骤。它实现了一个定义算法骨架的模板方法。模板方法调用原语操作以及在AbstractClass中定义的操作或其他对象的操作。
+- **具体类（MyApplication）**：实现原语操作以执行子类特定的算法步骤。
+
+合作：
+- 具体类依赖于抽象类来实现算法的不变步骤。
+
+**后果**
+
+模板方法是代码重用的基本技术。它们在类库中尤其重要，因为它们是在库类中提取出公共行为的手段。
+
+模板方法导致了一个被称为"Hollywood Principle"的倒置控制结构，即"Don't call us, we'll call you" [Swe85]。这是指父类调用子类的操作，而不是反过来。
+
+模板方法调用以下几种操作：
+- 具体操作（在具体类或客户端类上）；
+- 具体的AbstractClass操作（即，对子类通常有用的操作）；
+- 原语操作（即，抽象操作）；
+- 工厂方法（见工厂方法（107））；
+- 钩子操作，它们提供了子类可以在必要时扩展的默认行为。默认情况下，钩子操作通常什么都不做。
+
+重要的是，模板方法要指定哪些操作是钩子（可以被覆盖）和哪些操作是抽象操作（必须被覆盖）。为了有效地重用抽象类，子类的作者必须理解哪些操作是设计用于覆盖的。
+
+一个子类可以通过覆盖操作并显式调用父操作来扩展父类操作的行为：
+
+```csharp
+void Operation() {
+    base.Operation();
+    // DerivedClass 扩展行为
+}
+```
+
+遗憾的是，很容易忘记调用继承的操作。我们可以将这样的操作转换成一个模板方法，让父类控制子类如何扩展它。这个想法是在父类的一个模板方法中调用一个钩子操作。然后子类可以覆盖这个钩子操作：
+
+```csharp
+void Operation() {
+    // 父类行为
+    HookOperation();
+}
+
+void HookOperation() { }
+```
+
+子类覆盖HookOperation以扩展其行为：
+
+```csharp
+void HookOperation() {
+    // 衍生类扩展
+}
+```
+
+**实现**
+
+以下三个实现问题值得注意：
+1. 使用 C# 访问控制。在 C# 中，模板方法调用的原语操作可以被声明为 protected 成员。这确保它
+
+们只被模板方法调用。必须被覆盖的原语操作被声明为抽象。模板方法本身不应该被覆盖，因此你可以将模板方法声明为非虚成员函数。
+2. 最小化原语操作。设计模板方法的一个重要目标是最小化子类必须覆盖以实现算法的原语操作的数量。需要覆盖的操作越多，对客户来说就越麻烦。
+3. 命名规则。你可以通过在它们的名字前面添加一个前缀来识别应该被覆盖的操作。例如，MacApp 框架为 Macintosh 应用程序 [App89] 在模板方法名称前添加了"Do-"前缀："DoCreateDocument"，"DoRead"等等。
+
+**样例代码**
+
+以下 C# 示例展示了一个父类如何为其子类实施一个不变式。考虑一个支持在屏幕上绘图的 View 类。View 强制要求其子类只有在成为"焦点"后才能在视图中绘图，这需要适当地设置某些绘图状态（例如，颜色和字体）。
+
+我们可以使用一个 Display 模板方法来设置这种状态。View 定义了两个具体的操作，SetFocus 和 ResetFocus，分别设置和清理绘图状态。View 的 DoDisplay 钩子操作执行实际的绘图。Display 在 DoDisplay 之前调用 SetFocus 来设置绘图状态；在之后调用 ResetFocus 来释放绘图状态。
+
+```csharp
+void Display() {
+    SetFocus();
+    DoDisplay();
+    ResetFocus();
+}
+```
+
+为了保持不变式，视图的客户端总是调用 Display，而 View 的子类总是覆盖 DoDisplay。
+
+在 View 中，DoDisplay 什么也不做：
+
+```csharp
+void DoDisplay() { }
+```
+
+子类覆盖它以添加它们特定的绘图行为：
+
+```csharp
+void DoDisplay() {
+    // 渲染视图的内容
+}
+```
+
+**已知的应用**
+
+模板方法非常基础，以至于它们可以在几乎每一个抽象类中找到。Wirfs-Brock等人 [WBWW90, WBJ90] 提供了模板方法的一个很好的概述和讨论。
+
+**相关模式**
+
+Factory Methods (107) 通常被模板方法调用。在动机示例中，工厂方法 DoCreateDocument 被模板方法 OpenDocument 调用。
+
+策略 (315)：模板方法使用继承来变化算法的一部分。策略使用委托来变化整个算法。
