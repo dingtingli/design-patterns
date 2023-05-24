@@ -287,11 +287,11 @@ caller.Call(callback);
 
 **动机**
 
-考虑一个应用程序框架，它提供了Application和Document类。Application类负责打开存储在外部格式中的现有文档，如文件。Document对象代表从文件中读取的文档的信息。
+考虑一个应用程序框架，它提供了 Application 和 Document 类。Application 类负责打开存储在外部格式中的现有文档，如文件。Document 对象代表从文件中读取的文档的信息。
 
-使用这个框架构建的应用程序可以对Application和Document进行子类化，以满足特定需求。例如，一个绘图应用程序定义了DrawApplication和DrawDocument子类；一个电子表格应用程序定义了SpreadsheetApplication和SpreadsheetDocument子类。
+使用这个框架构建的应用程序可以对 Application 和 Document 进行子类化，以满足特定需求。例如，一个绘图应用程序定义了 DrawApplication 和 DrawDocument 子类；一个电子表格应用程序定义了 SpreadsheetApplication 和 SpreadsheetDocument 子类。
 
-抽象的Application类在其OpenDocument操作中定义了打开和读取文档的算法：
+抽象的 Application 类在其 OpenDocument 操作中定义了打开和读取文档的算法：
 
 ```csharp
 void OpenDocument(string name) {
@@ -310,29 +310,27 @@ void OpenDocument(string name) {
 }
 ```
 
-OpenDocument定义了打开文档的每个步骤。它检查文档是否可以被打开，创建应用程序特定的Document对象，将它添加到它的文档集合中，并从文件中读取Document。
+OpenDocument 定义了打开文档的每个步骤。它检查文档是否可以被打开，创建应用程序特定的 Document 对象，将它添加到它的文档集合中，并从文件中读取 Document。
 
-我们称OpenDocument为模板方法。一个模板方法以子类覆盖提供具体行为的抽象操作的形式定义一个算法。Application子类定义了检查文档是否可以被打开（CanOpenDocument）和创建Document（DoCreateDocument）的算法步骤。Document类定义了读取文档（DoRead）的步骤。模板方法还定义了一个让Application子类知道文档即将被打开（AboutToOpenDocument）的操作，以防他们关心。
+我们称 OpenDocument 为模板方法。一个模板方法以子类覆盖提供具体行为的抽象操作的形式定义一个算法。Application 子类定义了检查文档是否可以被打开（CanOpenDocument）和创建 Document（DoCreateDocument）的算法步骤。Document 类定义了读取文档（DoRead）的步骤。模板方法还定义了一个让 Application 子类知道文档即将被打开（AboutToOpenDocument）的操作，以防他们关心。
 
-通过使用抽象操作定义算法的一些步骤，模板方法固定了它们的排序，但允许Application和Document子类根据需要变化这些步骤。
+通过使用抽象操作定义算法的一些步骤，模板方法固定了它们的排序，但允许 Application 和 Document 子类根据需要变化这些步骤。
 
 **适用性**
 
 当需要实现算法的不变部分一次，并将可变的行为留给子类实现时，应使用模板方法模式。
 
-当子类之间的公共行为应被提取并在一个公共类中本地化以避免代码重复时。这是Opdyke和Johnson [OJ93]描述的"重构以泛化"的一个好例子。首先，你识别现有代码中的差异，然后将这些差异分解成新的操作。最后，用调用这些新操作的模板方法替换不同的代码。
+当子类之间的公共行为应被提取并在一个公共类中本地化以避免代码重复时。这是 Opdyke 和 Johnson [OJ93]描述的"重构以泛化"的一个好例子。首先，你识别现有代码中的差异，然后将这些差异分解成新的操作。最后，用调用这些新操作的模板方法替换不同的代码。
 
-当需要控制子类的扩展时。你可以定义一个模板方法，该方法在特定点调用"hook"操作（见后果），从
-
-而只允许在这些点进行扩展。
+当需要控制子类的扩展时。你可以定义一个模板方法，该方法在特定点调用" hook "操作（见后果），从而只允许在这些点进行扩展。
 
 **结构**
 
-参与者：
+**参与者**
 - **抽象类（Application）**：定义抽象原语操作，这些操作由具体子类定义以实现算法的步骤。它实现了一个定义算法骨架的模板方法。模板方法调用原语操作以及在AbstractClass中定义的操作或其他对象的操作。
 - **具体类（MyApplication）**：实现原语操作以执行子类特定的算法步骤。
 
-合作：
+**合作**
 - 具体类依赖于抽象类来实现算法的不变步骤。
 
 **后果**
@@ -382,7 +380,6 @@ void HookOperation() {
 
 以下三个实现问题值得注意：
 1. 使用 C# 访问控制。在 C# 中，模板方法调用的原语操作可以被声明为 protected 成员。这确保它
-
 们只被模板方法调用。必须被覆盖的原语操作被声明为抽象。模板方法本身不应该被覆盖，因此你可以将模板方法声明为非虚成员函数。
 2. 最小化原语操作。设计模板方法的一个重要目标是最小化子类必须覆盖以实现算法的原语操作的数量。需要覆盖的操作越多，对客户来说就越麻烦。
 3. 命名规则。你可以通过在它们的名字前面添加一个前缀来识别应该被覆盖的操作。例如，MacApp 框架为 Macintosh 应用程序 [App89] 在模板方法名称前添加了"Do-"前缀："DoCreateDocument"，"DoRead"等等。
