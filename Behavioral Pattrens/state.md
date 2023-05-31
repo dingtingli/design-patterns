@@ -302,3 +302,130 @@ public class TCPOctetStream
 `TCPConnection` 类使用状态模式来管理它的状态。它有一个私有字段 `_state` 来保存当前状态，然后在这个状态上调用各种方法。为了改变状态，`TCPConnection` 类提供了一个 `ChangeState` 方法，这个方法被所有的 `TCPState` 子类使用。
 
 最后，还有一个 `TCPOctetStream` 类。这个类在这个例子中并没有详细说明，但是它被 `TCPConnection` 和 `TCPEstablished` 类所使用。
+
+## chat
+
+.NET Framework 本身可能没有直接的例子使用数据表来实现状态迁移，这主要是因为.NET是一个通用的框架，它提供的是构建各种应用程序的基础设施，而不是某种特定应用领域的解决方案。
+
+然而，这并不意味着你不能在.NET应用程序中使用数据表来实现状态机模型。有些场景下，特别是涉及到复杂的业务规则和状态迁移时，基于表的状态机可以带来很大的灵活性和可维护性。
+
+例如，你可以使用数据库表来描述和跟踪每个状态和可能的状态转换。你的应用程序可以查询这个表来确定在特定状态下可以执行的操作，以及执行特定操作后应该进入的新状态。这样，业务规则和状态逻辑就可以从代码中抽取出来，存储在数据库中，便于管理和修改。
+
+下面是一个简单的例子，这是一个描述订单状态和可能的状态转换的数据库表：
+
+```
+OrderStatus
+- Id
+- Name
+
+OrderStatusTransition
+- Id
+- FromStatusId
+- ToStatusId
+- Action
+```
+
+然后，你的应用程序可以使用类似于以下的查询来确定在给定的订单状态下可以执行的操作：
+
+```sql
+SELECT Action
+FROM OrderStatusTransition
+WHERE FromStatusId = @currentStatusId
+```
+
+这种方法的主要优点是它提供了一种清晰、灵活的方式来管理状态逻辑，特别是在业务规则经常变化的情况下。然而，它也有一些缺点，例如性能可能不如硬编码的状态机，以及需要管理数据库表可能会增加复杂性。
+
+### .net 框架中的 yield return 使用了状态机吗？
+
+是的，`yield return`在.NET中被用于实现协程，这确实是一种形式的状态机。当你在方法中使用`yield return`语句时，C#编译器会生成一个隐藏的类来保存当前的状态（包括局部变量和当前执行的位置），这就形成了一种状态机。
+
+举一个简单的例子，考虑这样一个使用`yield return`的方法：
+
+```csharp
+public IEnumerable<int> GetNumbers()
+{
+    for (int i = 0; i < 10; i++)
+    {
+        yield return i;
+    }
+}
+```
+
+在上面的代码中，每次调用`GetNumbers`方法都会返回一个新的迭代器。这个迭代器内部有一个状态，跟踪我们目前在循环中的位置。每次我们调用迭代器的`MoveNext`方法，它就会跳到下一个`yield return`语句，并返回`true`。当我们到达方法的末尾时，`MoveNext`返回`false`。
+
+这个状态机背后的细节是由C#编译器自动处理的，所以作为开发者，你并不需要去管理状态机的内部工作。你只需要使用`yield return`语句，编译器就会为你生成正确的代码。
+
+上面的示例代码，如果用状态机模式如何表达，请给出编译器的模拟代码
+
+要手动实现使用 `yield return` 的状态机，我们需要创建一个实现 `IEnumerator<int>` 的类来保存状态，并将循环逻辑分解为多个状态。以下是一个可能的实现：
+
+```csharp
+public class NumberGenerator : IEnumerator<int>
+{
+    private int _state;
+    private int _current;
+    private int _i;
+
+    public int Current
+    {
+        get
+        {
+            return _current;
+        }
+    }
+
+    object IEnumerator.Current
+    {
+        get
+        {
+            return Current;
+        }
+    }
+
+    public bool MoveNext()
+    {
+        switch (_state)
+        {
+            case 0:
+                _i = 0;
+                _state = 1;
+                goto case 1;
+            case 1:
+                if (_i < 10)
+                {
+                    _current = _i;
+                    _i++;
+                    return true;
+                }
+                else
+                {
+                    _state = 2;
+                }
+                break;
+        }
+        return false;
+    }
+
+    public void Reset()
+    {
+        _state = 0;
+        _i = 0;
+    }
+
+    public void Dispose()
+    {
+        _state = 2;
+    }
+}
+```
+
+然后，我们可以创建一个 `IEnumerable<int>` 方法来返回新的 `NumberGenerator` 实例：
+
+```csharp
+public IEnumerable<int> GetNumbers()
+{
+    return new NumberGenerator();
+}
+```
+
+以上代码创建了一个状态机，与编译器为 `yield return` 生成的代码相似。`NumberGenerator` 类在内部跟踪其状态，`_state` 变量表示我们在循环中的位置，`_current` 和 `_i` 保存了我们的局部变量。
