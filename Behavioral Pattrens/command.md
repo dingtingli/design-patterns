@@ -270,81 +270,6 @@ class Program
 
 ---
 
-ThreadPool.QueueUserWorkItem 方法：这个方法可以将一个方法（或命令）排入队列以供线程池中的线程执行。虽然这个方法并没有直接使用命令模式，但它的工作方式类似于命令模式：我们可以将一个函数（或命令）封装在一个对象中（例如一个匿名方法或 lambda 表达式），然后将这个对象传递给 QueueUserWorkItem 方法，该方法会在一个线程中执行这个函数（或命令）。
-
-很好，我会为你提供一个代码示例来解释这段描述。
-
-我们可以将一个方法或命令封装在一个匿名函数或 lambda 表达式中，然后将其传递给 `ThreadPool.QueueUserWorkItem` 方法。这个方法会将该命令添加到线程池的工作队列中，并在有可用线程时执行该命令。
-
-让我们假设我们有一个名为 `PerformAction` 的命令，我们需要在一个新的线程中执行这个命令：
-
-```csharp
-void PerformAction(object state)
-{
-    // 执行一些长时间运行的操作，例如访问网络或数据库。
-    Console.WriteLine("Performing action...");
-}
-```
-
-然后，我们可以使用 `ThreadPool.QueueUserWorkItem` 方法来将 `PerformAction` 方法添加到线程池的工作队列中：
-
-```csharp
-ThreadPool.QueueUserWorkItem(new WaitCallback(PerformAction));
-```
-
-在这里，我们创建了一个 `WaitCallback` 委托，它是 `PerformAction` 方法的封装。然后我们将这个委托传递给 `QueueUserWorkItem` 方法。
-
-这个例子体现了命令模式的思想，即将一个操作（或命令）封装在一个对象中（在这个例子中，该对象是 `WaitCallback` 委托），然后将这个对象传递给其他方法或对象，由它们来决定何时和如何执行这个命令。虽然 .NET 框架并没有明确提供命令模式的实现，但 `ThreadPool.QueueUserWorkItem` 方法的工作方式与命令模式非常类似。
-
-
-2. ASP.NET Core中间件： 虽然没有明确标明，但ASP.NET Core中间件遵循命令模式。HTTP请求管道中的每件中间件都可以被看作是具有Invoke或InvokeAsync方法的命令（命令模式术语中的Execute方法）。中间件组件是解耦的，可以独立添加、删除或重新排序。
-
-在ASP.NET Core中，中间件（Middleware）用于处理HTTP请求和响应。你可以将每个中间件看作一个命令，其 `Invoke` 或 `InvokeAsync` 方法相当于命令模式中的 `Execute` 方法。
-
-以下是一个简单的ASP.NET Core中间件的示例，它模仿命令模式：
-
-```csharp
-public class MyMiddleware
-{
-    private readonly RequestDelegate _next;
-
-    public MyMiddleware(RequestDelegate next)
-    {
-        _next = next;
-    }
-
-    public async Task InvokeAsync(HttpContext httpContext)
-    {
-        // 在此处处理请求，类似于命令模式中的Execute方法
-        // ...
-
-        // Call the next middleware in the pipeline
-        await _next(httpContext);
-    }
-}
-```
-
-在这个例子中，`MyMiddleware` 类相当于命令模式中的一个命令。它有一个 `InvokeAsync` 方法，这个方法接受一个 `HttpContext` 对象，然后执行一些操作。在操作完成之后，它调用 `_next` 委托来执行管道中的下一个中间件。
-
-在你的 `Startup.cs` 文件中，你可以将这个中间件添加到你的HTTP请求管道中：
-
-```csharp
-public class Startup
-{
-    public void Configure(IApplicationBuilder app, IHostingEnvironment env)
-    {
-        // Add MyMiddleware to the pipeline
-        app.UseMiddleware<MyMiddleware>();
-
-        // ...
-    }
-}
-```
-
-你可以看到，我们在 `Configure` 方法中调用了 `UseMiddleware` 方法来添加我们的中间件到请求管道中。这个方法接受一个类型参数，该类型必须是一个中间件类。这种方式使得中间件组件可以独立地被添加、移除或重新排序，这也是命令模式的一个重要特性。
-
-总的来说，虽然ASP.NET Core的中间件并没有明确地标识为使用命令模式，但它的设计理念与命令模式是相符的：将请求处理逻辑封装在一个对象中，然后通过一个统一的接口（`Invoke` 或 `InvokeAsync` 方法）来调用这个对象。
-
 ---
 
 “COMMAND”模式还有另一种常见用途，我们将在支付问题中发现其有用：创建和执行事务。
@@ -546,3 +471,239 @@ foreach (var cmd in commands)
 ```
 
 在这个修改后的版本中，我们立即对每个 `AddEmployeeCommand` 对象进行验证。只有验证通过的命令才会被添加到列表中。然后，我们在午夜时分遍历列表，执行所有已验证的命令。这样，我们确保了只有有效的命令会被执行，而且所有的命令都会在午夜时分执行。
+
+
+这个描述实际上在解释如何使用命令模式来实现 "撤销" 功能。在 .NET 中，我们可以定义一个命令接口（或者基类），在其中添加一个 `Undo` 方法。然后，每个具体的命令类都需要实现这个 `Undo` 方法。在执行命令时，我们把命令对象保存在一个栈中，以便之后可以执行 "撤销" 操作。下面是基于这个描述的一个简单的 C# 代码示例：
+
+```csharp
+public interface ICommand
+{
+    void Execute();
+    void Undo();
+}
+
+public class DrawCircleCommand : ICommand
+{
+    private Canvas _canvas;
+    private Circle _circle;
+
+    public DrawCircleCommand(Canvas canvas, Circle circle)
+    {
+        _canvas = canvas;
+        _circle = circle;
+    }
+
+    public void Execute()
+    {
+        _canvas.DrawCircle(_circle);
+    }
+
+    public void Undo()
+    {
+        _canvas.RemoveCircle(_circle);
+    }
+}
+
+public class Canvas
+{
+    private Stack<ICommand> _commands = new Stack<ICommand>();
+
+    public void ExecuteCommand(ICommand command)
+    {
+        command.Execute();
+        _commands.Push(command);
+    }
+
+    public void UndoCommand()
+    {
+        if (_commands.Count > 0)
+        {
+            var command = _commands.Pop();
+            command.Undo();
+        }
+    }
+
+    public void DrawCircle(Circle circle)
+    {
+        // Logic to draw a circle
+    }
+
+    public void RemoveCircle(Circle circle)
+    {
+        // Logic to remove a circle
+    }
+}
+```
+
+在上述示例中，我们有一个 `ICommand` 接口，它定义了 `Execute` 和 `Undo` 方法。`DrawCircleCommand` 类实现了这个接口，并在 `Execute` 方法中画一个圆，在 `Undo` 方法中移除一个圆。
+
+`Canvas` 类持有一个命令栈 `_commands`，在执行命令时会把命令对象推入栈中。当执行 "撤销" 操作时，会从栈中弹出最近执行的命令对象，然后调用其 `Undo` 方法。
+
+需要注意的是，这只是一个简化的示例。在实际的应用程序中，你可能需要处理更多的细节，例如对命令的参数进行验证，处理可能的执行错误，以及支持 "重做" 操作等。
+
+
+### active object
+
+active object 模式是一种强大的设计模式，有助于实现多线程系统。这种模式将每个方法的调用、其参数和每个方法对应的返回值封装为一个对象。这些对象被异步分配，存储在一个队列中，并由一个单独的线程调用。这允许方法发送者和接收者的解耦，从而实现了方法的异步执行。
+
+
+让我们假设我们有一个名为Printer的类，它有一个Print(string message)方法。现在，我们想使用Active Object模式来异步执行这个方法。下面是我们如何在C#中实现这一目标：
+
+当然可以，让我们将上述内容翻译为中文。
+
+首先，我们需要创建一个命令接口，该接口代表一个操作。在我们的案例中，它将有一个名为 `Execute` 的方法。
+
+```csharp
+public interface ICommand
+{
+    void Execute();
+}
+```
+
+接下来，我们将创建一个实现此接口的类，名为 `PrintCommand`。这个类将封装 `Printer` 类的 `Print` 方法。
+
+```csharp
+public class PrintCommand : ICommand
+{
+    private Printer _printer;
+    private string _message;
+
+    public PrintCommand(Printer printer, string message)
+    {
+        _printer = printer;
+        _message = message;
+    }
+
+    public void Execute()
+    {
+        _printer.Print(_message);
+    }
+}
+```
+
+然后我们将实现活动对象模式。我们将创建一个名为 `ActiveObjectEngine` 的类，该类维护了命令对象队列，并异步执行它们。
+
+```csharp
+using System.Collections.Generic;
+using System.Threading;
+
+public class ActiveObjectEngine
+{
+    private Queue<ICommand> _commands = new Queue<ICommand>();
+
+    public void AddCommand(ICommand command)
+    {
+        lock (_commands)
+        {
+            _commands.Enqueue(command);
+        }
+        ProcessCommands();
+    }
+
+    private void ProcessCommands()
+    {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            while (_commands.Count > 0)
+            {
+                ICommand command;
+                lock (_commands)
+                {
+                    command = _commands.Dequeue();
+                }
+                command.Execute();
+            }
+        });
+    }
+}
+```
+
+最后，这就是我们如何使用 `ActiveObjectEngine` 来异步执行 `Print` 方法的方式：
+
+```csharp
+var printer = new Printer();
+var engine = new ActiveObjectEngine();
+
+engine.AddCommand(new PrintCommand(printer, "Hello, world!"));
+engine.AddCommand(new PrintCommand(printer, "Active Object pattern is awesome!"));
+```
+
+在这个例子中，`ActiveObjectEngine` 是一个类，它封装了方法发送者（这是 `PrintCommand` 对象）和接收者（这是 `Printer` 对象）。它在队列中存储命令对象，并使用线程池异步分派它们，从而实现异步方法执行。
+
+## .net framework
+
+
+ThreadPool.QueueUserWorkItem 方法：这个方法可以将一个方法（或命令）排入队列以供线程池中的线程执行。虽然这个方法并没有直接使用命令模式，但它的工作方式类似于命令模式：我们可以将一个函数（或命令）封装在一个对象中（例如一个匿名方法或 lambda 表达式），然后将这个对象传递给 QueueUserWorkItem 方法，该方法会在一个线程中执行这个函数（或命令）。
+
+很好，我会为你提供一个代码示例来解释这段描述。
+
+我们可以将一个方法或命令封装在一个匿名函数或 lambda 表达式中，然后将其传递给 `ThreadPool.QueueUserWorkItem` 方法。这个方法会将该命令添加到线程池的工作队列中，并在有可用线程时执行该命令。
+
+让我们假设我们有一个名为 `PerformAction` 的命令，我们需要在一个新的线程中执行这个命令：
+
+```csharp
+void PerformAction(object state)
+{
+    // 执行一些长时间运行的操作，例如访问网络或数据库。
+    Console.WriteLine("Performing action...");
+}
+```
+
+然后，我们可以使用 `ThreadPool.QueueUserWorkItem` 方法来将 `PerformAction` 方法添加到线程池的工作队列中：
+
+```csharp
+ThreadPool.QueueUserWorkItem(new WaitCallback(PerformAction));
+```
+
+在这里，我们创建了一个 `WaitCallback` 委托，它是 `PerformAction` 方法的封装。然后我们将这个委托传递给 `QueueUserWorkItem` 方法。
+
+这个例子体现了命令模式的思想，即将一个操作（或命令）封装在一个对象中（在这个例子中，该对象是 `WaitCallback` 委托），然后将这个对象传递给其他方法或对象，由它们来决定何时和如何执行这个命令。虽然 .NET 框架并没有明确提供命令模式的实现，但 `ThreadPool.QueueUserWorkItem` 方法的工作方式与命令模式非常类似。
+
+
+2. ASP.NET Core中间件： 虽然没有明确标明，但ASP.NET Core中间件遵循命令模式。HTTP请求管道中的每件中间件都可以被看作是具有Invoke或InvokeAsync方法的命令（命令模式术语中的Execute方法）。中间件组件是解耦的，可以独立添加、删除或重新排序。
+
+在ASP.NET Core中，中间件（Middleware）用于处理HTTP请求和响应。你可以将每个中间件看作一个命令，其 `Invoke` 或 `InvokeAsync` 方法相当于命令模式中的 `Execute` 方法。
+
+以下是一个简单的ASP.NET Core中间件的示例，它模仿命令模式：
+
+```csharp
+public class MyMiddleware
+{
+    private readonly RequestDelegate _next;
+
+    public MyMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
+
+    public async Task InvokeAsync(HttpContext httpContext)
+    {
+        // 在此处处理请求，类似于命令模式中的Execute方法
+        // ...
+
+        // Call the next middleware in the pipeline
+        await _next(httpContext);
+    }
+}
+```
+
+在这个例子中，`MyMiddleware` 类相当于命令模式中的一个命令。它有一个 `InvokeAsync` 方法，这个方法接受一个 `HttpContext` 对象，然后执行一些操作。在操作完成之后，它调用 `_next` 委托来执行管道中的下一个中间件。
+
+在你的 `Startup.cs` 文件中，你可以将这个中间件添加到你的HTTP请求管道中：
+
+```csharp
+public class Startup
+{
+    public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+    {
+        // Add MyMiddleware to the pipeline
+        app.UseMiddleware<MyMiddleware>();
+
+        // ...
+    }
+}
+```
+
+你可以看到，我们在 `Configure` 方法中调用了 `UseMiddleware` 方法来添加我们的中间件到请求管道中。这个方法接受一个类型参数，该类型必须是一个中间件类。这种方式使得中间件组件可以独立地被添加、移除或重新排序，这也是命令模式的一个重要特性。
+
+总的来说，虽然ASP.NET Core的中间件并没有明确地标识为使用命令模式，但它的设计理念与命令模式是相符的：将请求处理逻辑封装在一个对象中，然后通过一个统一的接口（`Invoke` 或 `InvokeAsync` 方法）来调用这个对象。
