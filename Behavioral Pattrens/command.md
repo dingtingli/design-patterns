@@ -134,3 +134,136 @@ public class GameApplication
 
 ## agile 笔记
 
+事实上，这种模式已经跨越了一个非常有趣的界限。正是在这个界限的交叉处，所有有趣的复杂性才存在。大多数类将一套方法与相应的一组变量相关联。COMMAND模式不是这样做的。相反，它封装了一个不带任何变量的单个函数。
+
+在严格的面向对象术语中，这是可憎的，这是功能分解的痕迹。它将一个函数的作用提升到类的级别。亵渎！然而，在两种范例相互冲突的边界处，有趣的事情开始发生。
+
+在这个描述中，我们有硬件设备（如马达，继电器），设备有可能的操作（如打开，关闭），还有一些传感器负责在某些事件发生时执行相应的命令。在这种情况下，命令模式可以非常有效地管理这种复杂性。
+
+首先，我们可以定义一个基础的 `Command` 接口，该接口声明了一个 `Execute` 方法：
+
+```csharp
+public interface ICommand
+{
+    void Execute();
+}
+```
+
+然后，我们可以定义一些特定的命令，这些命令将封装对硬件设备的操作。例如，我们可能有 `RelayOnCommand` 和 `MotorOffCommand` 类，这些类都实现了 `ICommand` 接口：
+
+```csharp
+public class RelayOnCommand : ICommand
+{
+    private Relay _relay;
+
+    public RelayOnCommand(Relay relay)
+    {
+        _relay = relay;
+    }
+
+    public void Execute()
+    {
+        _relay.On();
+    }
+}
+
+public class MotorOffCommand : ICommand
+{
+    private Motor _motor;
+
+    public MotorOffCommand(Motor motor)
+    {
+        _motor = motor;
+    }
+
+    public void Execute()
+    {
+        _motor.Off();
+    }
+}
+```
+
+这里的 `Relay` 和 `Motor` 类可以代表真实的硬件设备，它们可以有各自的 `On` 和 `Off` 方法等。
+
+最后，我们有一些传感器，它们可以绑定特定的命令并在检测到特定事件时执行这些命令：
+
+```csharp
+public class Sensor
+{
+    private ICommand _command;
+
+    public Sensor(ICommand command)
+    {
+        _command = command;
+    }
+
+    public void EventOccurred()
+    {
+        // 在检测到某个事件时执行命令
+        _command.Execute();
+    }
+}
+```
+
+在这种设计中，`Sensor` 类不需要知道它正在执行什么命令，也不需要知道它正在控制什么设备。它只需要知道它有一个命令，并且在某个事件发生时需要执行这个命令。这样，我们就能够有效地解耦设备、操作和触发这些操作的事件。
+
+这只是一个简单的实现，实际的情况可能会更复杂。例如，你可能需要定义更多的命令和设备，或者你可能需要让传感器能够在不同的事件发生时执行不同的命令。但是，基本的思想和模式仍然是相同的。
+
+谢谢你的反馈。下面我会通过代码来展示如何在初始化函数中设置传感器和对应的命令。
+
+首先，我们假设有一个 `SystemInitializer` 类，该类负责系统的初始化工作。在这个类中，我们可以定义一个 `Initialize` 方法，该方法创建一些传感器和命令，并将它们绑定在一起：
+
+```csharp
+public class SystemInitializer
+{
+    public List<Sensor> Sensors { get; private set; }
+
+    public void Initialize()
+    {
+        // 创建一些设备
+        Relay relay = new Relay();
+        Motor motor = new Motor();
+
+        // 创建一些命令，并将它们与设备关联起来
+        ICommand relayOnCommand = new RelayOnCommand(relay);
+        ICommand motorOffCommand = new MotorOffCommand(motor);
+
+        // 创建一些传感器，并将它们与命令关联起来
+        Sensor relaySensor = new Sensor(relayOnCommand);
+        Sensor motorSensor = new Sensor(motorOffCommand);
+
+        // 将所有的传感器存储起来，以便于后续的使用
+        Sensors = new List<Sensor> { relaySensor, motorSensor };
+    }
+}
+```
+
+然后，你可以在程序的主体部分（例如在 `Main` 方法或者某个服务类中）使用这个 `SystemInitializer` 来初始化系统：
+
+```csharp
+class Program
+{
+    static void Main(string[] args)
+    {
+        SystemInitializer initializer = new SystemInitializer();
+        initializer.Initialize();
+
+        // 此时，我们已经有了一些已经初始化并绑定了命令的传感器，
+        // 我们可以在需要的时候使用它们。
+        List<Sensor> sensors = initializer.Sensors;
+    }
+}
+```
+
+这样，我们就将传感器和命令之间的逻辑关系全部移到了 `SystemInitializer` 类中，使主程序体得以简化，而且更符合单一职责原则。如果需要修改设备和命令之间的关系，只需要修改 `SystemInitializer` 类即可，无需改动其他代码。
+
+
+在我们的例子中，每个命令类（如 RelayOnCommand 和 MotorOffCommand）封装了一个函数（即 Execute 方法），并且这个函数与类中的其他方法和变量是独立的。这个函数是类的唯一职责，也是类存在的唯一原因。
+
+这种方式看起来与面向对象编程的原则背道而驰，因为它将函数提升到了类的地位。然而，正是在这种面向对象编程和函数式编程的交界处，发生了一些有趣的事情。
+
+首先，由于每个命令类只有一个职责，它们都很小，很简单，易于理解和维护。其次，由于命令类封装了函数并对外提供了统一的接口（即 Execute 方法），我们可以在不改变代码其他部分的情况下添加新的命令类，这有助于提高系统的可扩展性。
+
+更重要的是，命令模式使我们能够以一种抽象和高层的方式处理函数。我们可以将函数作为对象在系统中传递，我们可以将函数与其他对象（如传感器）绑定，我们甚至可以将函数存储在数据结构中以供稍后使用。这些都是在没有命令模式的情况下很难或者不可能实现的。
+
+总的来说，命令模式是一种非常强大的设计模式，它可以帮助我们更好地管理复杂性，提高可扩展性，并打开一扇到函数式编程世界的大门。
