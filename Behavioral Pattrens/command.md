@@ -267,3 +267,282 @@ class Program
 更重要的是，命令模式使我们能够以一种抽象和高层的方式处理函数。我们可以将函数作为对象在系统中传递，我们可以将函数与其他对象（如传感器）绑定，我们甚至可以将函数存储在数据结构中以供稍后使用。这些都是在没有命令模式的情况下很难或者不可能实现的。
 
 总的来说，命令模式是一种非常强大的设计模式，它可以帮助我们更好地管理复杂性，提高可扩展性，并打开一扇到函数式编程世界的大门。
+
+---
+
+ThreadPool.QueueUserWorkItem 方法：这个方法可以将一个方法（或命令）排入队列以供线程池中的线程执行。虽然这个方法并没有直接使用命令模式，但它的工作方式类似于命令模式：我们可以将一个函数（或命令）封装在一个对象中（例如一个匿名方法或 lambda 表达式），然后将这个对象传递给 QueueUserWorkItem 方法，该方法会在一个线程中执行这个函数（或命令）。
+
+很好，我会为你提供一个代码示例来解释这段描述。
+
+我们可以将一个方法或命令封装在一个匿名函数或 lambda 表达式中，然后将其传递给 `ThreadPool.QueueUserWorkItem` 方法。这个方法会将该命令添加到线程池的工作队列中，并在有可用线程时执行该命令。
+
+让我们假设我们有一个名为 `PerformAction` 的命令，我们需要在一个新的线程中执行这个命令：
+
+```csharp
+void PerformAction(object state)
+{
+    // 执行一些长时间运行的操作，例如访问网络或数据库。
+    Console.WriteLine("Performing action...");
+}
+```
+
+然后，我们可以使用 `ThreadPool.QueueUserWorkItem` 方法来将 `PerformAction` 方法添加到线程池的工作队列中：
+
+```csharp
+ThreadPool.QueueUserWorkItem(new WaitCallback(PerformAction));
+```
+
+在这里，我们创建了一个 `WaitCallback` 委托，它是 `PerformAction` 方法的封装。然后我们将这个委托传递给 `QueueUserWorkItem` 方法。
+
+这个例子体现了命令模式的思想，即将一个操作（或命令）封装在一个对象中（在这个例子中，该对象是 `WaitCallback` 委托），然后将这个对象传递给其他方法或对象，由它们来决定何时和如何执行这个命令。虽然 .NET 框架并没有明确提供命令模式的实现，但 `ThreadPool.QueueUserWorkItem` 方法的工作方式与命令模式非常类似。
+
+
+2. ASP.NET Core中间件： 虽然没有明确标明，但ASP.NET Core中间件遵循命令模式。HTTP请求管道中的每件中间件都可以被看作是具有Invoke或InvokeAsync方法的命令（命令模式术语中的Execute方法）。中间件组件是解耦的，可以独立添加、删除或重新排序。
+
+在ASP.NET Core中，中间件（Middleware）用于处理HTTP请求和响应。你可以将每个中间件看作一个命令，其 `Invoke` 或 `InvokeAsync` 方法相当于命令模式中的 `Execute` 方法。
+
+以下是一个简单的ASP.NET Core中间件的示例，它模仿命令模式：
+
+```csharp
+public class MyMiddleware
+{
+    private readonly RequestDelegate _next;
+
+    public MyMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
+
+    public async Task InvokeAsync(HttpContext httpContext)
+    {
+        // 在此处处理请求，类似于命令模式中的Execute方法
+        // ...
+
+        // Call the next middleware in the pipeline
+        await _next(httpContext);
+    }
+}
+```
+
+在这个例子中，`MyMiddleware` 类相当于命令模式中的一个命令。它有一个 `InvokeAsync` 方法，这个方法接受一个 `HttpContext` 对象，然后执行一些操作。在操作完成之后，它调用 `_next` 委托来执行管道中的下一个中间件。
+
+在你的 `Startup.cs` 文件中，你可以将这个中间件添加到你的HTTP请求管道中：
+
+```csharp
+public class Startup
+{
+    public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+    {
+        // Add MyMiddleware to the pipeline
+        app.UseMiddleware<MyMiddleware>();
+
+        // ...
+    }
+}
+```
+
+你可以看到，我们在 `Configure` 方法中调用了 `UseMiddleware` 方法来添加我们的中间件到请求管道中。这个方法接受一个类型参数，该类型必须是一个中间件类。这种方式使得中间件组件可以独立地被添加、移除或重新排序，这也是命令模式的一个重要特性。
+
+总的来说，虽然ASP.NET Core的中间件并没有明确地标识为使用命令模式，但它的设计理念与命令模式是相符的：将请求处理逻辑封装在一个对象中，然后通过一个统一的接口（`Invoke` 或 `InvokeAsync` 方法）来调用这个对象。
+
+---
+
+“COMMAND”模式还有另一种常见用途，我们将在支付问题中发现其有用：创建和执行事务。
+
+我将创建一个模拟的员工数据库，以及一些命令类来表示添加和删除员工的操作。以下是相应的C#代码：
+
+首先，我们需要一个表示员工的类：
+
+```csharp
+public class Employee
+{
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public PayClassification PayClassification { get; set; }
+    // 其他员工信息
+}
+
+
+```
+
+我们创建一个表示PayClassification的类：
+
+```csharp
+public class PayClassification
+{
+    public decimal Salary { get; set; }
+    // 其他工资分类相关的信息
+}
+
+```
+
+然后，我们需要一个表示员工数据库的类：
+
+```csharp
+public class EmployeeDatabase
+{
+    private Dictionary<string, Employee> employees = new Dictionary<string, Employee>();
+
+    public void AddEmployee(Employee employee)
+    {
+        employees[employee.Id] = employee;
+    }
+
+    public void RemoveEmployee(string id)
+    {
+        employees.Remove(id);
+    }
+
+    // 其他数据库操作
+}
+
+```
+
+接下来，我们需要一个表示命令的接口：
+
+```csharp
+
+public interface ICommand
+{
+    bool Validate();
+    void Execute();
+}
+```
+
+然后，我们可以创建一些表示添加和删除员工操作的命令类：
+
+```csharp
+
+public class AddEmployeeCommand : ICommand
+{
+    private EmployeeDatabase database;
+    private Employee employee;
+    private PayClassification payClassification;
+
+    public AddEmployeeCommand(EmployeeDatabase database, Employee employee, PayClassification payClassification)
+    {
+        this.database = database;
+        this.employee = employee;
+        this.payClassification = payClassification;
+    }
+
+    public bool Validate()
+    {
+        // 这里可以检查员工信息和工资分类是否有效，以及数据库中是否已经存在这个员工
+        return true;
+    }
+
+    public void Execute()
+    {
+        employee.PayClassification = payClassification;
+        database.AddEmployee(employee);
+    }
+}
+
+
+```
+
+使用 `AddEmployeeCommand` 类实例化一个对象，然后使用它的 `Validate` 方法进行验证，如果验证成功，则使用 `Execute` 方法来执行操作。以下是使用 `AddEmployeeCommand` 的示例代码：
+
+```csharp
+// 创建一个 EmployeeDatabase 实例
+var database = new EmployeeDatabase();
+
+// 创建一个 Employee 实例
+var employee = new Employee 
+{
+    Id = "123",
+    Name = "John Doe",
+};
+
+// 创建一个 PayClassification 实例
+var payClassification = new PayClassification 
+{
+    Salary = 5000M,
+};
+
+// 创建一个 AddEmployeeCommand 实例
+var command = new AddEmployeeCommand(database, employee, payClassification);
+
+// 验证命令
+if (command.Validate())
+{
+    // 执行命令
+    command.Execute();
+}
+```
+
+这段代码首先创建了一个 `EmployeeDatabase` 实例，然后创建了一个 `Employee` 实例和一个 `PayClassification` 实例。然后，它创建了一个 `AddEmployeeCommand` 实例，并使用 `EmployeeDatabase` 实例、`Employee` 实例和 `PayClassification` 实例作为参数。然后，它调用 `AddEmployeeCommand` 实例的 `Validate` 方法进行验证，如果验证成功，它将调用 `Execute` 方法来添加员工到数据库。
+
+这段描述在强调命令模式所带来的解耦优势。下面我将逐点解释这段描述的含义。
+
+1. **解耦用户数据采集、数据验证和操作、以及业务对象的代码：** 在我们的示例中，`AddEmployeeCommand` 就是实现了这种解耦。它从构造函数接收员工和工资分类信息（这些数据通常来自用户输入），然后在 `Validate` 方法中进行验证，最后在 `Execute` 方法中进行操作。这个过程与员工（Employee）业务对象分离，员工对象不需要知道如何验证和添加自身。
+
+2. **GUI 代码中不包含验证和执行算法：** 如果我们有一个图形用户界面（GUI）用于添加员工，我们只需要在用户提交表单时创建一个新的 `AddEmployeeCommand` 对象，并调用其 `Validate` 和 `Execute` 方法。GUI 代码不需要知道如何验证员工数据，也不需要知道如何更新数据库。
+
+3. **与其他接口的复用：** 命令模式使我们的验证和执行代码可以被其他接口复用。例如，我们也可以为命令行界面或者 API 端点使用 `AddEmployeeCommand`，而无需更改 `AddEmployeeCommand` 类的任何代码。
+
+4. **分离了数据库操作代码和业务实体：** `AddEmployeeCommand` 类知道如何操作 `EmployeeDatabase` 来添加新的员工。这部分代码完全独立于 `Employee` 类。如果我们更改数据库操作的方式，我们只需要在 `AddEmployeeCommand` 中进行更改，而不会影响到 `Employee` 类。
+
+所以，从这个例子中可以看出，使用命令模式可以显著地解耦数据采集、数据验证和操作以及业务对象的代码，增强了代码的复用性和可维护性。
+
+这段描述在解释“时间解耦”的概念，即命令模式允许我们在数据采集后随时验证和执行操作，而不必立即执行。让我们来解释一下如何从上面的示例中理解这个概念。
+
+在上面的 `AddEmployeeCommand` 示例中，当我们创建一个新的 `AddEmployeeCommand` 对象并从用户那里获取数据时，我们并不需要立即验证或执行这个命令。我们可以将这个 `AddEmployeeCommand` 对象保存起来，稍后再进行验证和执行。
+
+例如，我们可以创建一个 `List<AddEmployeeCommand>`，将整天收集到的 `AddEmployeeCommand` 对象都添加到这个列表中。然后在凌晨时分，我们遍历这个列表，对每个 `AddEmployeeCommand` 对象进行验证，如果验证通过，则执行它。
+
+以下是相关的示例代码：
+
+```csharp
+// 创建一个列表来保存 AddEmployeeCommand 对象
+var commands = new List<AddEmployeeCommand>();
+
+// 在整天中，我们可能会从用户那里获取数据，并创建 AddEmployeeCommand 对象
+var command = new AddEmployeeCommand(database, employee, payClassification);
+commands.Add(command);
+
+// ... 这样的过程可能会在一天中多次发生 ...
+
+// 在凌晨时分，我们开始验证和执行命令
+foreach (var cmd in commands)
+{
+    if (cmd.Validate())
+    {
+        cmd.Execute();
+    }
+}
+```
+
+这就是时间解耦的概念。命令模式使我们可以在数据采集后的任何时间点验证和执行命令，而无需立即进行。这在处理需要在特定时间执行的操作时非常有用。
+
+可以稍微修改上述代码以满足你的需求：立即进行验证，但等到午夜才执行所有命令。具体如下：
+
+```csharp
+// 创建一个列表来保存 AddEmployeeCommand 对象
+var commands = new List<AddEmployeeCommand>();
+
+// 在整天中，我们可能会从用户那里获取数据，并创建 AddEmployeeCommand 对象
+var command = new AddEmployeeCommand(database, employee, payClassification);
+
+// 立即进行验证
+if (command.Validate())
+{
+    // 如果验证通过，将命令添加到列表中
+    commands.Add(command);
+}
+else
+{
+    // 处理验证失败的情况，例如显示错误信息
+}
+
+// ... 这样的过程可能会在一天中多次发生 ...
+
+// 在凌晨时分，我们开始执行所有验证过的命令
+foreach (var cmd in commands)
+{
+    cmd.Execute();
+}
+```
+
+在这个修改后的版本中，我们立即对每个 `AddEmployeeCommand` 对象进行验证。只有验证通过的命令才会被添加到列表中。然后，我们在午夜时分遍历列表，执行所有已验证的命令。这样，我们确保了只有有效的命令会被执行，而且所有的命令都会在午夜时分执行。
