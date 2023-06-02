@@ -630,7 +630,150 @@ engine.AddCommand(new PrintCommand(printer, "Active Object pattern is awesome!")
 
 在这个例子中，`ActiveObjectEngine` 是一个类，它封装了方法发送者（这是 `PrintCommand` 对象）和接收者（这是 `Printer` 对象）。它在队列中存储命令对象，并使用线程池异步分派它们，从而实现异步方法执行。
 
+---
+
+当然可以，我会逐段翻译上述内容：
+
+```csharp
+public class DelayedTyper : Command
+{
+    private long itsDelay;
+    private char itsChar;
+    private static bool stop = false;
+    private static ActiveObjectEngine engine = new ActiveObjectEngine();
+```
+`DelayedTyper`类继承自`Command`接口，这就意味着它需要实现`Execute()`方法。它有两个实例字段，`itsDelay`和`itsChar`，分别用来保存每次打印字符的延迟和要打印的字符。还有一个静态的`ActiveObjectEngine`实例，用来管理所有的`DelayedTyper`命令，以及一个`stop`布尔值，用来指示何时停止所有`DelayedTyper`命令。
+
+```csharp
+private class StopCommand : Command
+{
+    public void Execute()
+    {
+        DelayedTyper.stop = true;
+    }
+}
+```
+内部类`StopCommand`是`Command`的简单实现，当它被执行时，会将`DelayedTyper`类中的`stop`字段设置为`true`。这个命令用于指示所有正在运行的`DelayedTyper`命令停止打印字符。
+
+```csharp
+public static void Main(string[] args)
+{
+    engine.AddCommand(new DelayedTyper(100, '1'));
+    engine.AddCommand(new DelayedTyper(300, '3'));
+    engine.AddCommand(new DelayedTyper(500, '5'));
+    engine.AddCommand(new DelayedTyper(700, '7'));
+    Command stopCommand = new StopCommand();
+    engine.AddCommand(new SleepCommand(20000, engine, stopCommand));
+    engine.Run();
+}
+```
+在`Main`方法中，创建了不同的`DelayedTyper`命令并将它们添加到`ActiveObjectEngine`中。同时，也创建了一个`StopCommand`，并通过一个将在20000毫秒后执行的`SleepCommand`将它添加到`ActiveObjectEngine`中。然后调用`engine.Run()`开始执行所有的命令。
+
+```csharp
+public DelayedTyper(long delay, char c)
+{
+    itsDelay = delay;
+    itsChar = c;
+}
+```
+`DelayedTyper`的构造器将传入的延迟和字符赋值给实例字段。
+
+```csharp
+public void Execute()
+{
+    Console.Write(itsChar);
+    if (!stop)
+        DelayAndRepeat();
+}
+```
+在`Execute`方法中，将字符打印到控制台。然后，如果`stop`标志没有设置，就调用`DelayAndRepeat`方法。
+
+```csharp
+private void DelayAndRepeat()
+{
+    engine.AddCommand(new SleepCommand(itsDelay, engine, this));
+}
+```
+`DelayAndRepeat`方法创建一个新的`SleepCommand`，并将当前实例作为唤醒命令和`itsDelay`字段作为睡眠时长，然后将这个命令添加到`ActiveObjectEngine`。这确保了在`itsDelay`毫秒后，这个`DelayedTyper`命令会再次被执行，创建一个只有当`stop`标志设置为`true`时才会停止的循环。
+
+总的来说，`DelayedTyper`类代表一个命令，该命令会在规定的间隔内持续地在控制台打印特定的字符，直到执行一个`StopCommand`为止。
+
+
+`DelayedTyper`程序的输出会有一些不同，这是因为该程序是一个多线程的系统，并且依赖于时间间隔。由于CPU时钟和真实时钟（即系统的硬件时钟）之间存在微小的不同步现象，这就使得每个`DelayedTyper`命令在精确的时间间隔内被执行的可能性并不总是100%。这就导致了每次运行程序时，字符打印的顺序可能会有所不同。
+
+这个现象反映出了所谓的"非确定性"行为，这是多线程系统的一个典型特征。即，尽管我们能预测出这个系统的大致行为（例如，它会打印出1, 3, 5, 7字符，并且在20秒后停止），但是，我们不能精确地预知这些字符被打印出的精确顺序。这是因为它们的执行顺序受到了处理器调度和时钟同步精度的影响。
+
+在给定的两个示例输出中：
+
+```
+135711311511371113151131715131113151731111351113711531111357...
+135711131513171131511311713511131151731113151131711351113117...
+```
+你可以看到，尽管在每个例子中都打印出了1, 3, 5, 7字符，但是它们的顺序却有所不同。这就是由于上述非确定性行为导致的结果。
+
+
+为什么说这是多线程的程序？RTC 特点不就是在一个线程了运行吗？
+
+确实，"run-to-completion" (RTC)任务通常在同一线程中按序运行，每个任务都会完全执行完毕，然后再运行下一个任务。然而，这种方式模拟的是多线程编程的一些行为。
+
+在这个例子中，虽然所有的`Command`实例在同一个线程中运行，但每一个`Command`实例（例如`DelayedTyper`）都表现得像是在它自己的"线程"中运行。每个`DelayedTyper`命令在一段时间后（通过`SleepCommand`模拟）执行，并且似乎与其他的`DelayedTyper`命令并发运行，因为它们各自的打印任务相互之间是交错进行的。
+
+所以，虽然这段代码实际上在单线程环境中运行，但它通过使用`Command`模式和`SleepCommand`来模拟多线程环境中的行为。这使得这段代码能够展示出类似于多线程环境中的非确定性行为：尽管每个`DelayedTyper`命令的行为（打印特定字符并等待特定延迟）是确定的，但是这些命令的交错执行顺序是非确定的，因为它受到处理器调度和时钟同步精度的影响。
+
+非常抱歉没有解释清楚，我会更详细地解释并提供一个时间轴作为解释的基础。
+
+假设我们运行以下代码：
+
+```csharp
+engine.AddCommand(new DelayedTyper(100, '1'));
+engine.AddCommand(new DelayedTyper(300, '3'));
+engine.AddCommand(new DelayedTyper(500, '5'));
+engine.AddCommand(new DelayedTyper(700, '7'));
+Command stopCommand = new StopCommand();
+engine.AddCommand(new SleepCommand(20000, engine, stopCommand));
+engine.Run();
+```
+
+以下是一个时间轴的示例，展示了程序的执行过程：
+
+```
+0ms: 创建并添加 DelayedTyper(100, '1') 到 ActiveObjectEngine
+0ms: 创建并添加 DelayedTyper(300, '3') 到 ActiveObjectEngine
+0ms: 创建并添加 DelayedTyper(500, '5') 到 ActiveObjectEngine
+0ms: 创建并添加 DelayedTyper(700, '7') 到 ActiveObjectEngine
+0ms: 创建 StopCommand，并添加到 ActiveObjectEngine 中的 SleepCommand 中
+0ms: 调用 engine.Run()，开始执行命令
+```
+
+在这个时间轴中，所有的`DelayedTyper`命令和`SleepCommand`命令被添加到了 `ActiveObjectEngine`。接下来，我们将看到每个`DelayedTyper`命令如何按照设定的延迟时间进行执行。
+(下面的时间轴不大对，可能是chatgpt瞎编的)
+
+```
+0ms: DelayedTyper(100, '1') 打印字符 '1'
+0ms: DelayedTyper(300, '3') 打印字符 '3'
+0ms: DelayedTyper(500, '5') 打印字符 '5'
+0ms: DelayedTyper(700, '7') 打印字符 '7'
+100ms: DelayedTyper(100, '1') 打印字符 '1'（第二次）
+200ms: DelayedTyper(100, '1') 打印字符 '1'（第三次）
+300ms: DelayedTyper(300, '3') 打印字符 '3'（第二次）
+400ms: DelayedTyper(100, '1') 打印字符 '1'（第四次）
+500ms: DelayedTyper(500, '5') 打印字符 '5'（第二次）
+600ms: DelayedTyper(100, '1') 打印字符 '1'（第五次）
+700ms: DelayedTyper(700, '7') 打印字符 '7'（第二次）
+...
+20000ms: SleepCommand(20000) 延迟时间已过，激活 StopCommand
+20000ms: 所有命令执行完毕，engine.Run() 返回
+
+```
+
+在这个时间轴中，我们可以看到各个`DelayedTyper`命令按照设定的延迟时间在不同的时间点打印出相应的字符。由于命令是按序执行的，每个`DelayedTyper`命令都会在前一个命令完成后立即执行。因此，我们看到了字符的交错打印。
+
+值得注意的是，`SleepCommand(20000)`在延迟时间过后激活了`StopCommand`，停止了所有命令的执行，并且程序结束。
+
+总结来说，尽管这段代码是在单线程环境中运行的，但通过使用`DelayedTyper`命令的设定延迟和顺序执行，我们模拟了多线程环境中的行为。这就是为什么字符打印的顺序在每次运行时可能会有所不同的原因。这种非确定性的行为是多线程系统的典型特征，因为它受到处理器调度和时钟同步精度的影响。
+
 ## .net framework
+
 
 
 ThreadPool.QueueUserWorkItem 方法：这个方法可以将一个方法（或命令）排入队列以供线程池中的线程执行。虽然这个方法并没有直接使用命令模式，但它的工作方式类似于命令模式：我们可以将一个函数（或命令）封装在一个对象中（例如一个匿名方法或 lambda 表达式），然后将这个对象传递给 QueueUserWorkItem 方法，该方法会在一个线程中执行这个函数（或命令）。
@@ -707,3 +850,139 @@ public class Startup
 你可以看到，我们在 `Configure` 方法中调用了 `UseMiddleware` 方法来添加我们的中间件到请求管道中。这个方法接受一个类型参数，该类型必须是一个中间件类。这种方式使得中间件组件可以独立地被添加、移除或重新排序，这也是命令模式的一个重要特性。
 
 总的来说，虽然ASP.NET Core的中间件并没有明确地标识为使用命令模式，但它的设计理念与命令模式是相符的：将请求处理逻辑封装在一个对象中，然后通过一个统一的接口（`Invoke` 或 `InvokeAsync` 方法）来调用这个对象。
+
+
+## Design Patterns
+
+例如，用户界面工具包包含像按钮和菜单这样的对象，它们会响应用户输入来执行请求。但是，工具包不能在按钮或菜单中明确地实现请求，因为只有使用工具包的应用程序才知道应该在哪个对象上做什么。
+
+作为工具包设计者，我们无法知道请求的接收者或执行请求的操作。
+
+命令模式允许工具包对象通过将请求本身转化为对象来向未指定的应用对象发出请求。
+
+可以使用命令对象轻松实现菜单。菜单中的每一个选项都是MenuItem类的一个实例。一个应用程序类创建这些菜单和菜单项，以及其他用户界面。应用程序类还跟踪用户打开的文档对象。
+
+应用程序将每个MenuItem与一个具体的Command子类实例进行配置。当用户选择一个MenuItem时，MenuItem调用其命令的Execute，而Execute执行操作。MenuItem不知道它们使用的是哪个Command子类。命令子类存储请求的接收者，并在接收者上调用一个或多个操作。
+
+
+例如，PasteCommand支持从剪贴板粘贴文本到一个文档。PasteCommand的接收者是在实例化时提供的文档对象。Execute操作在接收文档上调用Paste。OpenCommand的Execute操作不同：它提示用户输入一个文档名称，创建一个相应的文档对象，将文档添加到接收应用程序，并打开文档。
+
+有时，一个MenuItem需要执行一系列命令。例如，可以从CenterDocumentCommand对象和NormalSizeCommand对象构造一个用于将页面居中显示的MenuItem。因为这种将命令串联在一起的方式很常见，所以我们可以定义一个MacroCommand类，允许MenuItem执行开放式的命令数。
+
+MacroCommand是一个简单地执行一系列命令的ConcreteCommand子类。MacroCommand没有明确的接收者，因为它的命令序列定义了自己的接收者。
+
+在这些示例中，请注意命令模式是如何将调用操作的对象和知道如何执行操作的对象解耦的。这给我们在设计用户界面时提供了很大的灵活性。一个应用程序可以通过让菜单和按钮共享同一个ConcreteCommand子类的实例，同时提供一个菜单和一个按钮界面给一个功能。我们可以动态替换命令，这对于实现上下文敏感的菜单是有用的。我们还可以通过组合命令来支持命令脚本。所有这些都是可能的，因为发出请求的对象只需要知道如何发出它，而不需要知道请求如何被执行。
+
+示例代码
+这里的 C++ 代码示例展示了在上述文章中的 "动机" 部分中提到的 Command 类的实现，我们将定义 OpenCommand、PasteCommand 和 MacroCommand。首先是抽象的 Command 类：
+
+```csharp
+public abstract class Command {
+    public abstract void Execute();
+}
+```
+
+OpenCommand 会打开用户提供的文档名称。在其构造器中，必须传递一个 Application 对象。AskUser 是一个实现的方法，用于提示用户打开哪个文档。
+
+```csharp
+public class OpenCommand : Command {
+    private Application _application;
+    private string _response;
+
+    public OpenCommand(Application application){
+        _application = application;
+    }
+
+    public override void Execute() {
+        string name = AskUser();
+        if (name != null) {
+            Document document = new Document(name);
+            _application.Add(document);
+            document.Open();
+        }
+    }
+
+    protected virtual string AskUser() {
+        // implementation of user prompt goes here
+        return "";
+    }
+}
+```
+
+PasteCommand 必须将 Document 对象作为其接收者传递。接收者作为参数传递给 PasteCommand 的构造函数。
+
+```csharp
+public class PasteCommand : Command {
+    private Document _document;
+
+    public PasteCommand(Document doc) {
+        _document = doc;
+    }
+
+    public override void Execute() {
+        _document.Paste();
+    }
+}
+```
+
+对于不可撤销并且不需要参数的简单命令，我们可以使用一个类模板来参数化命令的接收者。我们将为此类命令定义一个模板子类 SimpleCommand。SimpleCommand 是由接收者类型参数化的，并且维护了一个接收者对象和一个作为成员函数指针存储的操作之间的绑定。
+
+```csharp
+public class SimpleCommand<TReceiver> : Command {
+    private readonly Action<TReceiver> _action;
+    private readonly TReceiver _receiver;
+
+    public SimpleCommand(TReceiver receiver, Action<TReceiver> action) {
+        _receiver = receiver;
+        _action = action;
+    }
+
+    public override void Execute() {
+        _action(_receiver);
+    }
+}
+```
+
+要创建一个在 MyClass 的实例上调用 Action 的命令，客户端只需写：
+
+```csharp
+MyClass receiver = new MyClass();
+Command aCommand = new SimpleCommand<MyClass>(receiver, receiver.Action);
+aCommand.Execute();
+```
+
+请注意，此解决方案仅适用于简单的命令。更复杂的命令需要跟踪它们的接收者，也可能需要跟踪参数和/或撤销状态，这需要一个 Command 子类。
+
+MacroCommand 管理一系列子命令，并提供添加和删除子命令的操作。无需显式接收者，因为子命令已经定义了它们的接收者。
+
+```csharp
+public class MacroCommand : Command {
+    private List<Command> _cmds;
+
+    public MacroCommand() {
+        _cmds = new List<Command>();
+    }
+
+    public void Add(Command cmd) {
+        _cmds.Add(cmd);
+    }
+
+    public void Remove(Command cmd) {
+        _cmds.Remove(cmd);
+    }
+
+    public override void Execute() {
+        foreach (
+
+Command cmd in _cmds) {
+            cmd.Execute();
+        }
+    }
+}
+```
+
+MacroCommand 的关键在于其 Execute 成员函数。这会遍历所有子命令，并对它们每一个执行 Execute。
+
+请注意，如果 MacroCommand 实现一个 Unexecute 操作，那么必须按照与 Execute 的实现相反的顺序对其子命令进行 unexecute。
+
+最后，MacroCommand 必须提供操作以管理其子命令。MacroCommand 也负责删除其子命令。
