@@ -1110,6 +1110,23 @@ public class ObserverRegistry
 }
 ```
 
+这段代码中，`FindAllObserverActions` 方法就是使用反射来查找所有被 `Subscribe` 标签标记的方法。
+
+在 `FindAllObserverActions` 方法中：
+
+1.  `observer.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)` 这行代码获取了 `observer` 对象所有的方法，无论是公开的还是非公开的，无论是静态的还是实例的。
+
+2.  `.Where(m => m.GetCustomAttributes(typeof(SubscribeAttribute), false).Any())` 这行代码过滤掉了没有被 `Subscribe` 标签标记的方法。`GetCustomAttributes(typeof(SubscribeAttribute), false)` 用于获取方法上的所有 `SubscribeAttribute` 标签，如果这个列表不为空，那么 `Any()` 就会返回 `true`，表示这个方法被 `Subscribe` 标签标记。
+
+3.  `.Where(m => m.GetParameters().Length == 1)` 这行代码再次过滤，保证了这个方法有且只有一个参数，这是我们的 `EventBus` 对被 `Subscribe` 标记的方法的要求。
+
+4.  `.Select(m => new ObserverAction(observer, m))` 这行代码将过滤后的方法转化为 `ObserverAction` 对象，`ObserverAction` 对象保存了方法的信息以及方法所属的对象。
+
+然后在 `Register` 方法中，`var observerActions = FindAllObserverActions(observer);` 这行代码调用了 `FindAllObserverActions` 方法，获取了所有被 `Subscribe` 标签标记的方法。接下来的代码就是将这些方法与对应的事件类型关联起来。
+
+因此，可以看到，这段代码中确实使用了反射来查找所有被 `Subscribe` 标签标记的方法，并将它们与对应的事件类型关联起来。
+
+
 然后，创建表示 `EventBus` 和 `AsyncEventBus` 的类：
 
 ```csharp
