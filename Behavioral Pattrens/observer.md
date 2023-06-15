@@ -753,6 +753,479 @@ public class MailService
 
 ---
 
+如果我们的需求更加极端一点，需要在同步阻塞和异步非阻塞之间灵活切换，是否就要不停地修改 UserController 的代码。除此之外，如果在项目中，不止一个业务模块需要用到异步非阻塞观察者模式，如何使用可复用的代码实现。
+
+chatgpt 方案
+
+在这种情况下，一种有效的解决方案是创建一个独立的事件总线（Event Bus），该总线可以灵活地处理同步和异步的观察者。在这个事件总线中，我们可以将事件和其对应的处理器列表进行映射，并允许在运行时动态地注册事件和其处理器。
+
+以下是使用 C# 实现一个简单的事件总线：
+
+```csharp
+public interface IEventHandler
+{
+    Task HandleAsync(object eventData);
+    void Handle(object eventData);
+}
+
+public class EventBus
+{
+    private readonly Dictionary<Type, List<IEventHandler>> _handlers = new Dictionary<Type, List<IEventHandler>>();
+    // private readonly ExecutorService _executorService = new ExecutorService();
+    //ExecutorService类，这是在Java的java.util.concurrent包中的一个类。在.NET中执行异步操作，我们通常使用的是Task类。
+
+    public void Register<TEventData>(IEventHandler eventHandler)
+    {
+        if (_handlers.ContainsKey(typeof(TEventData)))
+        {
+            _handlers[typeof(TEventData)].Add(eventHandler);
+        }
+        else
+        {
+            _handlers.Add(typeof(TEventData), new List<IEventHandler> { eventHandler });
+        }
+    }
+
+    public void Trigger<TEventData>(TEventData eventData)
+    {
+        var eventType = typeof(TEventData);
+        if (!_handlers.ContainsKey(eventType)) return;
+
+        foreach (var eventHandler in _handlers[eventType])
+        {
+            eventHandler.Handle(eventData);
+        }
+    }
+
+    // public void TriggerAsync<TEventData>(TEventData eventData)
+    // {
+    //     var eventType = typeof(TEventData);
+    //     if (!_handlers.ContainsKey(eventType)) return;
+
+    //     foreach (var eventHandler in _handlers[eventType])
+    //     {
+    //         _executorService.Execute(() => eventHandler.HandleAsync(eventData));
+    //     }
+    // }
+
+    public void TriggerAsync<TEventData>(TEventData eventData)
+    {
+        var eventType = typeof(TEventData);
+        if (!_handlers.ContainsKey(eventType)) return;
+
+        foreach (var eventHandler in _handlers[eventType])
+        {
+            Task.Run(() => eventHandler.HandleAsync(eventData));
+        }
+    }
+}
+
+public class UserRegisterEvent
+{
+    public long UserId { get; set; }
+
+    public UserRegisterEvent(long userId)
+    {
+        UserId = userId;
+    }
+}
+```
+
+这里我假设 `ExecutorService` 类是一个简单的线程池管理类，可以在新的线程中执行传递给 `Execute` 方法的函数。
+
+然后，我们可以定义 `UserRegisterEventHandler` 类来处理 `UserRegisterEvent` 事件：
+
+```csharp
+public class UserRegisterEventHandler : IEventHandler
+{
+    public void Handle(object eventData)
+    {
+        // 同步处理 UserRegisterEvent 事件
+    }
+
+    public Task HandleAsync(object eventData)
+    {
+        // 异步处理 UserRegisterEvent 事件
+    }
+}
+
+public class PromotionEventHandler : IEventHandler
+{
+    public void Handle(object eventData)
+    {
+        // 同步处理 PromotionEvent 事件
+    }
+
+    public Task HandleAsync(object eventData)
+    {
+        // 异步处理 PromotionEvent 事件
+    }
+}
+
+public class MailEventHandler : IEventHandler
+{
+    public void Handle(object eventData)
+    {
+        // 同步处理 MailEvent 事件
+    }
+
+    public Task HandleAsync(object eventData)
+    {
+        // 异步处理 MailEvent 事件
+    }
+}
+
+```
+
+在使用时，我们只需要将需要处理的事件和对应的处理器注册到 `EventBus` 中，然后在需要的时候触发事件：
+
+```csharp
+public class UserController : Controller
+{
+    private readonly UserService _userService;
+    private readonly EventBus _eventBus;
+
+    public UserController(UserService userService, EventBus eventBus)
+    {
+        _userService = userService;
+        _eventBus = eventBus;
+    }
+
+    public long Register(string telephone, string password)
+    {
+        // 省略输入参数的校验代码
+        // 省略 _userService.Register() 异常的 try-catch 代码
+        long userId = _userService.Register(telephone, password);
+
+        // 创建事件并通知观察者
+        var userRegisterEvent = new UserRegisterEvent(userId);
+        _eventBus.Trigger(userRegisterEvent);
+
+        return userId;
+    }
+
+    public async Task<long> RegisterAsync(string telephone, string password)
+    {
+        // 省略输入参数的校验代码
+        // 省略 _userService.Register() 异常的 try-catch 代码
+        long userId = await _userService.RegisterAsync(telephone, password);
+
+        // 创建事件并通知观察者
+        var
+
+ userRegisterEvent = new UserRegisterEvent(userId);
+        _eventBus.TriggerAsync(userRegisterEvent);
+
+        return userId;
+    }
+}
+
+public class Startup
+{
+    public void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton<UserService>();
+        services.AddSingleton<EventBus>();
+        services.AddSingleton<UserRegisterEventHandler>();
+        services.AddSingleton<PromotionEventHandler>();
+        services.AddSingleton<MailEventHandler>();
+        // 其他服务...
+    }
+
+    public void Configure(IApplicationBuilder app, IHostingEnvironment env, EventBus eventBus, UserRegisterEventHandler userRegisterEventHandler, PromotionEventHandler promotionEventHandler, MailEventHandler mailEventHandler)
+    {
+        // 注册事件和它们的处理器
+        eventBus.Register<UserRegisterEvent>(userRegisterEventHandler);
+        eventBus.Register<PromotionEvent>(promotionEventHandler);
+        eventBus.Register<MailEvent>(mailEventHandler);
+        // 其他配置...
+    }
+}
+
+```
+
+这样一来，不同的业务模块只需要定义自己的事件和处理器，然后在需要的时候注册和触发事件，而不需要修改 `UserController` 的代码。在需要从同步阻塞切换到异步非阻塞时，只需要改变触发事件的方法即可。
+
+
+### 解释1
+
+在上面的代码中，Event Bus是一个负责处理事件和其对应的处理器之间映射关系的类。这个设计模式通常被用在分布式系统中，以实现解耦和增强系统的可扩展性。下面我将详细解释这段代码。
+
+Event Bus主要由两部分组成：
+
+1. 一个用于存储事件类型和对应处理器列表的映射关系的字典 `_handlers`。这个字典的键是事件类型，值是一个包含所有处理这个事件类型的处理器的列表。
+
+2. 一个用于在新线程中执行函数的 `ExecutorService` 实例 `_executorService`。这个类用于实现异步的事件处理。
+
+Event Bus提供了以下几个方法：
+
+- `Register<TEventData>(IEventHandler eventHandler)`：这个方法用于注册事件和对应的处理器。参数 `TEventData` 是事件的类型，`eventHandler` 是处理这个事件的处理器。这个方法首先检查是否已经有处理器被注册到这个事件类型，如果有，则添加新的处理器到处理器列表；如果没有，则创建一个新的处理器列表并添加到字典。
+
+- `Trigger<TEventData>(TEventData eventData)`：这个方法用于触发一个事件。参数 `TEventData` 是事件的类型，`eventData` 是事件的数据。这个方法首先检查是否有处理器被注册到这个事件类型，如果没有，则直接返回；如果有，则遍历处理器列表，依次调用每个处理器的 `Handle` 方法。
+
+- `TriggerAsync<TEventData>(TEventData eventData)`：这个方法用于异步触发一个事件。参数 `TEventData` 是事件的类型，`eventData` 是事件的数据。这个方法首先检查是否有处理器被注册到这个事件类型，如果没有，则直接返回；如果有，则遍历处理器列表，依次调用 `ExecutorService` 的 `Execute` 方法在新线程中执行每个处理器的 `HandleAsync` 方法。
+
+通过这种方式，我们可以在需要的时候动态地注册事件和处理器，然后在需要的时候触发事件。这样可以实现在系统的不同部分之间的解耦，使得系统更加可扩展。
+
+### 解释2
+
+在.NET中，并没有直接的ExecutorService类，这是在Java的java.util.concurrent包中的一个类。在.NET中执行异步操作，我们通常使用的是Task类。抱歉给您带来的困扰。
+
+首先，让我们回顾一下Event Bus是什么。Event Bus是一种软件架构模式，它用于解耦组件之间的通信。通过Event Bus，组件可以发布（发送）和订阅（接收）消息（事件）。发布者不需要知道谁订阅了它们的事件，同样，订阅者也不需要知道谁发布了事件。这样就可以减少组件之间的耦合。
+
+下面是修改后的Event Bus的实现：
+
+```csharp
+public interface IEventHandler
+{
+    Task HandleAsync(object eventData);
+    void Handle(object eventData);
+}
+
+public class EventBus
+{
+    private readonly Dictionary<Type, List<IEventHandler>> _handlers = new Dictionary<Type, List<IEventHandler>>();
+
+    public void Register<TEventData>(IEventHandler eventHandler)
+    {
+        if (_handlers.ContainsKey(typeof(TEventData)))
+        {
+            _handlers[typeof(TEventData)].Add(eventHandler);
+        }
+        else
+        {
+            _handlers.Add(typeof(TEventData), new List<IEventHandler> { eventHandler });
+        }
+    }
+
+    public void Trigger<TEventData>(TEventData eventData)
+    {
+        var eventType = typeof(TEventData);
+        if (!_handlers.ContainsKey(eventType)) return;
+
+        foreach (var eventHandler in _handlers[eventType])
+        {
+            eventHandler.Handle(eventData);
+        }
+    }
+
+    public void TriggerAsync<TEventData>(TEventData eventData)
+    {
+        var eventType = typeof(TEventData);
+        if (!_handlers.ContainsKey(eventType)) return;
+
+        foreach (var eventHandler in _handlers[eventType])
+        {
+            Task.Run(() => eventHandler.HandleAsync(eventData));
+        }
+    }
+}
+```
+
+在这个实现中，Event Bus包含一个字典（_handlers），它存储了事件类型（作为键）和处理这些事件的处理器列表（作为值）。每一个处理器都实现了`IEventHandler`接口，该接口定义了两个方法：`Handle`和`HandleAsync`，分别用于同步处理和异步处理事件。
+
+`Register<TEventData>`方法用于注册一个事件处理器，用于处理类型为`TEventData`的事件。
+
+`Trigger<TEventData>`方法用于触发一个事件，它将遍历处理这个类型事件的所有处理器，并调用它们的`Handle`方法。
+
+`TriggerAsync<TEventData>`方法也用于触发一个事件，但是它将异步地调用处理器的`HandleAsync`方法。这是通过`Task.Run`实现的，它会在一个新的线程中执行指定的操作。这样就可以避免阻塞主线程，实现异步处理。
+
+这就是修改后的Event Bus的实现。这个实现提供了一个灵活的方式来解耦应用程序的组件，使得它们可以异步地进行通信，而无需关心其他组件的实现。
+
+---
+
+C# 手把手实现一个 Google Guava EventBus 框架
+
+这是一个 EventBus 的 C# 版本实现。在这个例子中，我会用到 .NET 5.0 的 `ConcurrentDictionary` 和 `ConcurrentBag` 以及 `System.Reflection` 命名空间下的反射API。
+
+首先，我们需要定义一个特性来标记事件处理的方法：
+
+```csharp
+// 1.Subscribe
+[AttributeUsage(AttributeTargets.Method)]
+public class SubscribeAttribute : Attribute
+{
+}
+```
+
+接下来，定义一个表示被 `Subscribe` 特性标记的方法的类：
+
+```csharp
+// 2.ObserverAction
+public class ObserverAction
+{
+    public object Target { get; }
+    public MethodInfo Method { get; }
+
+    public ObserverAction(object target, MethodInfo method)
+    {
+        Target = target ?? throw new ArgumentNullException(nameof(target));
+        Method = method ?? throw new ArgumentNullException(nameof(method));
+    }
+
+    public void Execute(object eventToPost)
+    {
+        Method.Invoke(Target, new object[] { eventToPost });
+    }
+}
+```
+
+然后，创建一个表示注册表的类：
+
+```csharp
+// 3.ObserverRegistry
+public class ObserverRegistry
+{
+    private readonly ConcurrentDictionary<Type, ConcurrentBag<ObserverAction>> registry = new ConcurrentDictionary<Type, ConcurrentBag<ObserverAction>>();
+
+    public void Register(object observer)
+    {
+        var observerActions = FindAllObserverActions(observer);
+        foreach (var action in observerActions)
+        {
+            if (registry.ContainsKey(action.Method.GetParameters()[0].ParameterType))
+            {
+                registry[action.Method.GetParameters()[0].ParameterType].Add(action);
+            }
+            else
+            {
+                registry[action.Method.GetParameters()[0].ParameterType] = new ConcurrentBag<ObserverAction> { action };
+            }
+        }
+    }
+
+    public IEnumerable<ObserverAction> GetMatchedObserverActions(object eventToPost)
+    {
+        return registry[eventToPost.GetType()].ToArray();
+    }
+
+    private static IEnumerable<ObserverAction> FindAllObserverActions(object observer)
+    {
+        var info = observer.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .Where(m => m.GetCustomAttributes(typeof(SubscribeAttribute), false).Any())
+            .Where(m => m.GetParameters().Length == 1)
+            .Select(m => new ObserverAction(observer, m));
+        return info;
+    }
+}
+```
+
+然后，创建表示 `EventBus` 和 `AsyncEventBus` 的类：
+
+```csharp
+// 4.EventBus
+public class EventBus
+{
+    private readonly ObserverRegistry registry = new ObserverRegistry();
+
+    public void Register(object observer)
+    {
+        registry.Register(observer);
+    }
+
+    public void Post(object eventToPost)
+    {
+        var observerActions = registry.GetMatchedObserverActions(eventToPost);
+        foreach (var observerAction in observerActions)
+        {
+            observerAction.Execute(eventToPost);
+        }
+    }
+}
+
+// 5.AsyncEventBus
+public class AsyncEventBus : EventBus
+{
+    private readonly ObserverRegistry registry = new ObserverRegistry();
+    private readonly TaskFactory taskFactory = new TaskFactory(TaskScheduler.Default);
+
+    public void PostAsync(object eventToPost)
+    {
+        var observerActions = registry.GetMatchedObserverActions(eventToPost);
+        foreach (var observerAction in observerActions)
+        {
+            taskFactory.StartNew(() => observerAction.Execute(eventToPost));
+        }
+    }
+}
+```
+
+这就是一个基础的 `EventBus` 框架实现，不过请注意，这只是一个基础实现，还有许多可以优化的地方，如异常处理、取消任务等。此外，反射操作会产生一定的性能开销，实际使用时需要谨慎考虑。
+
+在上面的 C# EventBus 实现中，我们创建了一种观察者模式的框架，该框架允许多个观察者监听并响应某个事件。以下是该框架每个主要部分的详细解释：
+
+1. `SubscribeAttribute`：这是一个自定义的特性（Attribute），用于标记那些需要作为事件处理器的方法。
+
+2. `ObserverAction`：这个类表示一个事件处理器，它包含一个方法（由 `MethodInfo` 对象表示）和该方法所属的目标对象。`Execute` 方法是用来触发事件处理器的，它使用了 .NET 反射来调用目标方法。
+
+3. `ObserverRegistry`：这是一个注册表，用于管理所有注册的事件处理器。每种类型的事件都有自己的处理器集合，它们在 ConcurrentDictionary 中被索引和存储。注册表提供了两个主要方法：`Register`（用于添加新的事件处理器）和 `GetMatchedObserverActions`（用于根据事件类型检索匹配的处理器）。
+
+4. `EventBus`：这是框架的主要组成部分，它提供了注册事件处理器和发布事件的方法。在发布事件时，EventBus 会查找匹配的事件处理器并同步执行它们。
+
+5. `AsyncEventBus`：这是 `EventBus` 的一个子类，它以异步方式运行事件处理器。它使用了 `TaskFactory` 来在不同的线程上运行处理器，这样可以避免阻塞主线程。
+
+这个框架的主要优点是它提供了一种简洁的方式来实现观察者模式，通过注解和反射，可以非常方便地定义和注册事件处理器。然而，这个实现还有许多可以改进的地方，比如异常处理，取消任务等。此外，由于反射操作的开销，你可能需要考虑在性能关键的情况下使用其他技术。
+
+现在我们已经有了 `EventBus`，在我们的 `UserController` 中使用起来就变得很简单。首先我们需要在我们的处理器中添加 `Subscribe` 标签，然后在我们的 `UserController` 中注册这些处理器并发布事件。
+
+下面是一个示例：
+
+```csharp
+public class UserRegisterEventHandler
+{
+    [Subscribe]
+    public void HandleEvent(UserRegisterEvent userRegisterEvent)
+    {
+        // do something with the event
+    }
+}
+
+public class PromotionEventHandler
+{
+    [Subscribe]
+    public void HandleEvent(UserRegisterEvent userRegisterEvent)
+    {
+        // do something with the event
+    }
+}
+
+public class MailEventHandler
+{
+    [Subscribe]
+    public void HandleEvent(UserRegisterEvent userRegisterEvent)
+    {
+        // do something with the event
+    }
+}
+
+public class UserController
+{
+    private EventBus eventBus = new EventBus();
+
+    public UserController()
+    {
+        eventBus.Register(new UserRegisterEventHandler());
+        eventBus.Register(new PromotionEventHandler());
+        eventBus.Register(new MailEventHandler());
+    }
+
+    public void Register(User user)
+    {
+        // Save the user to the database...
+
+        UserRegisterEvent userRegisterEvent = new UserRegisterEvent(user);
+        eventBus.Post(userRegisterEvent);
+    }
+}
+```
+
+在这个示例中，我们在 `UserController` 的构造函数中注册了我们的事件处理器，然后在 `Register` 方法中发布了 `UserRegisterEvent`。然后 `EventBus` 会调用注册的处理器中标记为 `Subscribe` 的方法。
+
+这样，我们就可以在处理器中处理用户注册事件了，而 `UserController` 无需知道这些处理器的具体实现。当我们需要添加新的处理器时，只需要创建新的处理器并在 `UserController` 中注册即可，无需修改 `UserController` 的其他代码，这样符合开闭原则。
+
+注意，由于这个示例使用的是同步的 `EventBus`，事件处理器的处理方法会在同一线程中按注册的顺序依次执行。如果你希望这些处理器能并行处理事件，可以使用 `AsyncEventBus` 并将 `Post` 方法更改为 `PostAsync`。
+---
+
 Q: 社交媒体的关注功能也属于订阅-发布模式的一种，一个明星用户可以有几万甚至几千万的关注者，一个明星用户发布的一条信息如何分发到所有关注者的消息队列中？这其中会遇到什么问题？应该如何解决？
 
 社交媒体的关注功能的确可以看作是一种发布-订阅模式的实现。当一个用户（如一个明星）发布一条新的信息时，这条信息需要被分发到所有关注者的消息队列中。对于拥有大量关注者的用户来说，这可能是一个巨大的挑战。以下是可能遇到的问题，以及一些潜在的解决方案。
