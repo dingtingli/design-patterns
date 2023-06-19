@@ -1,6 +1,5 @@
 # observer 观察者
 
-## agile 笔记
 
 ## 极客时间 笔记
 观察者模式会对应不同的代码实现方式：有同步阻塞的实现方式，也有异步非阻塞的实现方式；有进程内的实现方式，也有跨进程的实现方式
@@ -1241,6 +1240,7 @@ public class UserController
 这样，我们就可以在处理器中处理用户注册事件了，而 `UserController` 无需知道这些处理器的具体实现。当我们需要添加新的处理器时，只需要创建新的处理器并在 `UserController` 中注册即可，无需修改 `UserController` 的其他代码，这样符合开闭原则。
 
 注意，由于这个示例使用的是同步的 `EventBus`，事件处理器的处理方法会在同一线程中按注册的顺序依次执行。如果你希望这些处理器能并行处理事件，可以使用 `AsyncEventBus` 并将 `Post` 方法更改为 `PostAsync`。
+
 ---
 
 Q: 社交媒体的关注功能也属于订阅-发布模式的一种，一个明星用户可以有几万甚至几千万的关注者，一个明星用户发布的一条信息如何分发到所有关注者的消息队列中？这其中会遇到什么问题？应该如何解决？
@@ -1321,6 +1321,170 @@ chatgpt 回答：
 3. **使用场景：** 生产者-消费者模型主要用于处理异步任务，或者在不同组件或系统间进行数据传递。观察者模式主要用于实现事件驱动系统，或者在一个对象状态改变时自动更新其他对象。
 
 4. **数据处理：** 在生产者-消费者模型中，生产者和消费者通常对数据进行不同的处理。在观察者模式中，所有观察者对同一个事件可能进行相同或者不同
+
+## agile 笔记
+
+Digital Clock 数字时钟
+
+前提：
+
+计算机的时间由两部分组成：硬件时钟（也称为实时时钟，RTC）和系统时钟。实时时钟是电脑硬件的一部分，即使电脑关机或者重启，它仍然继续运行，提供当前的日期和时间。系统时钟是操作系统内的软件实现，它在操作系统启动时从实时时钟获取时间，然后根据计时器（如 CPU 的 TSC，Time Stamp Counter）的信号更新这个时间。
+
+在系统启动的时候，操作系统会从硬件实时时钟（RTC）中读取当前的日期和时间。这个时间通常以某种形式的时间戳存储，例如自1970年1月1日（UNIX纪元）以来的秒数。操作系统使用这个时间戳初始化系统时钟。
+
+然后，系统时钟就开始工作了。它使用一个或多个计时器信号来跟踪时间的流逝。例如，一个运行频率为1GHz的CPU发出的计时器信号的频率是1GHz，也就是说，每过一纳秒就发出一个信号。操作系统接收到这个信号后，就把系统时钟的时间加上一纳秒。
+
+需求：
+
+1. **Clock 对象**：它接收来自操作系统的毫秒中断信号（称为 "ticks"），并将它们转换为一天中的时间。它知道如何从毫秒计算秒，从秒计算分钟，从分钟计算小时，从小时计算天，等等。它知道一个月有多少天，一年有多少个月，以及闰年的规则。也就是说，Clock 对象具备时间计算和转换的能力。
+
+    **Clock 对象**：它接收来自操作系统的毫秒中断信号（称为 "ticks"），并将它们转换为一天中的时间。它知道如何从毫秒计算秒，从秒计算分钟，从分钟计算小时，从小时计算天，等等。它知道一个月有多少天，一年有多少个月，以及闰年的规则。也就是说，Clock 对象具备时间计算和转换的能力。
+
+    模拟代码：
+
+    我们可以使用System.Threading.Timer或者System.Timers.Timer来实现每隔一段时间执行某个操作的功能。这里我会用System.Timers.Timer来实现。
+
+    ```csharp
+    using System;
+    using System.Timers;
+
+    public class Clock
+    {
+        private Timer timer;
+
+        public Clock()
+        {
+            this.timer = new Timer(1000); // 设置时间间隔为1秒
+            this.timer.Elapsed += TimerElapsed;
+            this.timer.Start();
+        }
+
+        // 当定时器的时间间隔到了，这个方法就会被调用
+        private void TimerElapsed(object sender,    ElapsedEventArgs e)
+        {
+            this.Seconds = DateTime.Now.Second;
+            this.Minutes = DateTime.Now.Minute;
+            this.Hours = DateTime.Now.Hour;
+            this.Days = DateTime.Now.Day;
+        }
+
+        public int Seconds { get; private set; }
+
+        public int Minutes { get; private set; }
+
+        public int Hours { get; private set; }
+
+        public int Days { get; private set; }
+    }
+    ```
+
+    可以编写如下代码显示时间：
+
+    ```csharp
+    Clock clock = new Clock();
+
+    while (true)
+    {
+        //Display Time
+        Console.WriteLine("{0} : {1} : {2}", clock.Hours, clock.Minutes, clock.Seconds);
+    }
+    ```
+
+2. **DigitalClock 对象**：我们期望显示的数字时钟。它需要持续展示当前的时间，这需要从 Clock 对象中获取数据。
+
+
+在.NET中，一个常见的方式来解决这个问题是使用事件。我们可以在Clock类中定义一个事件，当秒、分钟、小时或天发生变化时触发这个事件。然后，ClockDriver可以监听这个事件，当事件被触发时，它就知道时间发生了变化，从而可以更新DigitalClock。
+
+首先，我们需要在Clock类中添加一个事件。由于我们关心的是时间的变化，所以我将这个事件命名为`TimeChanged`：
+
+```csharp
+using System;
+using System.Timers;
+
+public class Clock
+{
+    private Timer timer;
+    public event Action TimeChanged; // 定义了一个事件
+
+    public Clock()
+    {
+        this.timer = new Timer(1000); // 设置时间间隔为1秒
+        this.timer.Elapsed += TimerElapsed;
+        this.timer.Start();
+    }
+
+    // 当定时器的时间间隔到了，这个方法就会被调用
+    private void TimerElapsed(object sender, ElapsedEventArgs e)
+    {
+        this.Seconds = DateTime.Now.Second;
+        this.Minutes = DateTime.Now.Minute;
+        this.Hours = DateTime.Now.Hour;
+        this.Days = DateTime.Now.Day;
+
+        TimeChanged?.Invoke(); // 如果有对象注册了这个事件，那么就触发这个事件
+    }
+
+    public int Seconds { get; private set; }
+
+    public int Minutes { get; private set; }
+
+    public int Hours { get; private set; }
+
+    public int Days { get; private set; }
+}
+```
+
+然后，我们可以创建一个ClockDriver类，这个类监听Clock的TimeChanged事件，并在事件被触发时更新DigitalClock：
+
+```csharp
+public class ClockDriver
+{
+    private Clock clock;
+    private DigitalClock digitalClock;
+
+    public ClockDriver(Clock clock, DigitalClock digitalClock)
+    {
+        this.clock = clock;
+        this.digitalClock = digitalClock;
+        this.clock.TimeChanged += UpdateDigitalClock;
+    }
+
+    private void UpdateDigitalClock()
+    {
+        this.digitalClock.DisplayTime(this.clock.Hours, this.clock.Minutes, this.clock.Seconds);
+    }
+}
+```
+
+在上面的代码中，我们在ClockDriver的构造函数中注册了Clock的TimeChanged事件。当这个事件被触发时，就会调用`UpdateDigitalClock`方法，这个方法会更新DigitalClock的显示。
+
+最后，我们还需要一个DigitalClock类，这个类有一个`DisplayTime`方法来显示时间：
+
+```csharp
+public class DigitalClock
+{
+    public void DisplayTime(int hours, int minutes, int seconds)
+    {
+        Console.WriteLine("{0} : {1} : {2}", hours, minutes, seconds);
+    }
+}
+```
+
+现在，我们可以创建Clock、DigitalClock和ClockDriver对象，然后运行程序：
+
+```csharp
+var clock = new Clock();
+var digitalClock = new DigitalClock();
+var clockDriver = new ClockDriver(clock, digitalClock);
+
+// 程序会一直运行，直到你手动停止它
+while (true) { }
+```
+
+在这个程序中，Clock对象会每秒更新一次时间，并触发TimeChanged事件。ClockDriver监听这个事件，当事件被触发时，它会更新DigitalClock的显示。这样，我们就不需要不断地轮询Clock对象了，而
+
+是让Clock对象在时间发生变化时通知我们，这样就能大大减少CPU的消耗。
+
 
 ## Design Patterns 笔记
 
